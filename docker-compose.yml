@@ -20,8 +20,8 @@ services:
       TZ: America/Sao_Paulo
       OWNER_NAME: Mateus
       BRAIN_PROVIDER: nim
-      FAST_MODEL: meta/llama-3.1-8b-instruct
-      DEEP_MODEL: meta/llama-3.3-70b-instruct
+      FAST_MODEL: nvidia/ising-calibration-1.5-31b
+      DEEP_MODEL: openai/gpt-oss-20b
       NVIDIA_API_KEY: TROQUE-pela-sua-chave-nvapi
       # Senha entre o servidor e o PC (a mesma no .env do PC). Gere uma com:
       #   python -c "import secrets; print(secrets.token_urlsafe(24))"

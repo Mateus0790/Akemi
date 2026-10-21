@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     # --- Cérebro: dois modelos (rápido para triagem/respostas curtas,
     # profundo para planejar e conversas complexas) ---
     brain_provider: ProviderName = "nim"
-    fast_model: str = "meta/llama-3.1-8b-instruct"
-    deep_model: str = "meta/llama-3.3-70b-instruct"
+    fast_model: str = "nvidia/ising-calibration-1.5-31b"
+    deep_model: str = "openai/gpt-oss-20b"
     deep_provider: ProviderName | None = None  # default = brain_provider
     llm_timeout_s: float = 30.0
     llm_temperature: float = 0.8

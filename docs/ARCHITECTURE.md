@@ -26,7 +26,7 @@ VTuber de IA.
 |---|---|
 | `core/events.py` | Barramento pub/sub assíncrono. Cada evento carrega `Trust` (OWNER, SYSTEM, PUBLIC). |
 | `core/orchestrator.py` | Monta tudo e roda as tasks (barramento, voz, chat, pensamento ocioso, áudio). |
-| `brain/attention.py` | Decide se e com qual modelo reagir. É o que resolve a latência: o 70B só entra quando vale. |
+| `brain/attention.py` | Decide se e com qual modelo reagir. É o que resolve a latência: o modelo profundo só entra quando vale. |
 | `brain/mind.py` | Monta o prompt, gera em streaming, fala frase por frase, executa ações, pensa quando ociosa. |
 | `brain/state.py` | Humor (com decaimento), objetivo atual, tarefas, últimos pensamentos. Persiste em `data/state.json`. |
 | `brain/persona.yaml` | Personalidade editável. |
@@ -43,9 +43,9 @@ VTuber de IA.
 
 ## Dois modelos
 
-- **Rápido** (`FAST_MODEL`, ex. Llama 3.1 8B): triagem, chat da live, comentários,
+- **Rápido** (`FAST_MODEL`, ex. `nvidia/ising-calibration-1.5-31b`): triagem, chat da live, comentários,
   pensamento ocioso, respostas simples ao dono.
-- **Profundo** (`DEEP_MODEL`, ex. Llama 3.3 70B): só quando o dono pede algo
+- **Profundo** (`DEEP_MODEL`, ex. `openai/gpt-oss-20b`): só quando o dono pede algo
   complexo (`looks_complex` — explicar, planejar, código, perguntas longas).
 
 Respostas saem em streaming e são cortadas em frases (`SentenceStreamer`), então
