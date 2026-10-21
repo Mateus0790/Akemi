@@ -14,6 +14,7 @@ Fluxo::
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from collections import deque
@@ -37,6 +38,11 @@ logger = structlog.get_logger()
 
 MOOD_TAG_RE = re.compile(r"\[\[\s*humor\s*:\s*([\wçãéíóú]+)\s*\]\]", re.I)
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
+# Promessa de ação sem a tag ("vou te lembrar", "abrindo o Discord", "anotado").
+ACTION_PROMISE_RE = re.compile(
+    r"\b((vou|j[aá] vou|deixa que eu|pode deixar que eu)\s+(te\s+)?(lembrar|avisar|abrir|fechar|pausar|tocar|pesquisar|anotar|guardar|aumentar|abaixar|baixar|pular|mutar)|te (lembro|aviso)|(eu )?me lembro|guardo|(abrindo|fechando|pausando|pesquisando|anotando|guardando|pulando)|anotad[oa]|guardad[oa])\b",
+    re.I,
+)
 # Auto-apresentação que o modelo insiste em fazer mesmo instruído a não fazer
 # ("Sou a Akemi, a IA do Mateus", "Fui criada pela NVIDIA...").
 SELF_INTRO_RE = re.compile(
@@ -215,6 +221,26 @@ class Mind:
                 raw = "Tô aqui. " + raw
         return raw.strip()
 
+    async def _recover_action_tags(self, messages: list[Message], raw: str) -> list:
+        """Ela prometeu fazer algo ("vou te lembrar", "abrindo") mas não escreveu a
+        tag. Pergunta de novo, só pela tag, para a promessa não ficar vazia."""
+        ask = (
+            "Você disse que ia fazer uma ação, mas não escreveu a tag, então nada aconteceu. "
+            "Responda SOMENTE com a(s) tag(s) [[acao:...]] necessária(s). "
+            "Se nenhuma ação da lista serve, responda vazio."
+        )
+        try:
+            fix = await self.models.fast.complete(
+                [*messages, Message("assistant", raw), Message("user", ask)],
+                model=self.models.fast_model, max_tokens=80, temperature=0.2,
+            )
+        except ProviderError as exc:
+            logger.warning("action tag recovery failed", error=str(exc))
+            return []
+        calls = parse_action_calls(fix)[1]
+        logger.info("action tags recovered", actions=[c.name for c in calls])
+        return calls
+
     def _apply_mood_tag(self, raw: str) -> None:
         if m := MOOD_TAG_RE.search(raw):
             self.state.set_mood(m.group(1))
@@ -294,6 +320,8 @@ class Mind:
                 return
             self._apply_mood_tag(raw)
             spoken, calls = parse_action_calls(raw)
+            if not calls and ACTION_PROMISE_RE.search(spoken):
+                calls = await self._recover_action_tags(messages, raw)
             for call in calls:
                 result = await self.actions.request(call, event.trust)
                 logger.info("action requested", action=call.name, status=result.status)
@@ -303,12 +331,21 @@ class Mind:
                     action = self.actions.get(call.name)
                     if action and action.speak_result and result.value:
                         self.say(str(result.value), event)
+                    elif not spoken and isinstance(result.value, str) and result.value not in ("", "ok"):
+                        # Fez sem dizer nada: confirma em poucas palavras.
+                        self.say(result.value, event)
                 elif result.status == "error":
                     self.say(f"Não consegui: {result.detail}", event)
 
-            if spoken.strip():  # o NIM recusa mensagem de assistente vazia
+            # Quando ela só executou a ação, a tag entra no histórico: sem resposta
+            # nenhuma, o modelo via pedidos seguidos e se perdia no formato. E o
+            # NIM recusa mensagem de assistente vazia.
+            reply = spoken.strip() or " ".join(
+                f"[[acao:{c.name} {json.dumps(c.args, ensure_ascii=False)}]]" for c in calls
+            )
+            if reply:
                 self.history.append(Message("user", text))
-                self.history.append(Message("assistant", spoken))
+                self.history.append(Message("assistant", reply))
             self.memory.add_episode("conversa", f"{self.owner}: {text}\nAkemi: {spoken}")
             self._save_state()
 

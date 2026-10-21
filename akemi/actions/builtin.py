@@ -3,42 +3,25 @@
 from __future__ import annotations
 
 import datetime as dt
-import os
-import subprocess
-import sys
 import webbrowser
 from urllib.parse import urlparse
 
 from akemi.brain.state import InnerState
 from akemi.storage.memory import Memory
 
-from .registry import ActionRegistry, Tier
-
-# Programas que podem ser abertos por nome. Mantenha curto e explícito:
-# um agente que abre "qualquer executável" é um risco desnecessário.
-DEFAULT_PROGRAMS = {
-    "bloco de notas": "notepad.exe",
-    "notepad": "notepad.exe",
-    "calculadora": "calc.exe",
-    "explorador": "explorer.exe",
-    "vscode": "code",
-    "discord": "discord",
-    "spotify": "spotify",
-    "obs": "obs64.exe",
-}
+from .registry import ActionRegistry
 
 
 def register_builtin_actions(
     registry: ActionRegistry,
     memory: Memory,
     state: InnerState,
-    programs: dict[str, str] | None = None,
 ) -> None:
-    programs = {k.lower(): v for k, v in (programs or DEFAULT_PROGRAMS).items()}
-
-    @registry.register("lembrar", "guarda um fato duradouro sobre o dono ou o mundo",
-                       params={"texto": "o fato"})
-    def lembrar(texto: str) -> str:
+    @registry.register("guardar_fato", "guarda na memória um fato duradouro sobre o dono ou o mundo (não é lembrete)",
+                       params={"texto": "o fato"},
+                       example=("lembra que eu gosto de café sem açúcar",
+                                '[[acao:guardar_fato {"texto": "o dono gosta de café sem açúcar"}]]'))
+    def guardar_fato(texto: str) -> str:
         return "anotado" if memory.add_fact(texto) else "já sabia"
 
     @registry.register("esquecer", "apaga fatos guardados que contenham um trecho",
@@ -65,7 +48,7 @@ def register_builtin_actions(
     def horario() -> str:
         return dt.datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    @registry.register("abrir_site", "abre um site no navegador", tier=Tier.CONFIRM,
+    @registry.register("abrir_site", "abre um site no navegador",
                        params={"url": "endereço http(s)"})
     def abrir_site(url: str) -> str:
         if "://" not in url:
@@ -73,16 +56,4 @@ def register_builtin_actions(
         if urlparse(url).scheme not in ("http", "https"):
             raise ValueError("só http/https")
         webbrowser.open(url)
-        return "aberto"
-
-    @registry.register("abrir_programa", "abre um programa da lista permitida", tier=Tier.CONFIRM,
-                       params={"nome": "um de: " + ", ".join(sorted(programs))})
-    def abrir_programa(nome: str) -> str:
-        exe = programs.get(nome.strip().lower())
-        if exe is None:
-            raise ValueError("programa fora da lista permitida")
-        if sys.platform == "win32":
-            os.startfile(exe)  # type: ignore[attr-defined]  # noqa: S606
-        else:
-            subprocess.Popen([exe])  # noqa: S603
         return "aberto"

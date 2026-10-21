@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 
 import structlog
 
 from akemi.actions.builtin import register_builtin_actions
 from akemi.actions.registry import ActionRegistry
+from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import LLMProvider, build_provider
@@ -69,6 +71,7 @@ class Akemi:
         tts: TTSEngine | None = None,
         memory: Memory | None = None,
         persist: bool = True,
+        desktop_actions: bool = True,
     ) -> None:
         self.settings = settings
         self.bus = EventBus()
@@ -90,6 +93,12 @@ class Akemi:
 
         self.actions = ActionRegistry()
         register_builtin_actions(self.actions, self.memory, self.state)
+        self.reminders = Reminders(self._remind)
+        register_reminder_actions(self.actions, self.reminders)
+        if sys.platform == "win32" and desktop_actions:
+            from akemi.actions.desktop import register_desktop_actions
+
+            register_desktop_actions(self.actions)
 
         self.mind = Mind(
             self.bus,
@@ -121,6 +130,12 @@ class Akemi:
     def owner_say(self, text: str, source: str = "console") -> None:
         self.bus.publish(Event("owner.speech_started", source=source, trust=Trust.OWNER, priority=Priority.URGENT))
         self.bus.publish(Event("owner.message", {"text": text}, source=source, trust=Trust.OWNER, priority=Priority.HIGH))
+
+    def _remind(self, text: str) -> None:
+        self.bus.publish(
+            Event("speech.say", {"text": f"Ei, {self.settings.owner_name}, lembrete: {text}", "origin": "lembrete"},
+                  source="lembrete", trust=Trust.SYSTEM, priority=Priority.HIGH)
+        )
 
     def chat_message(self, user: str, text: str, platform: str = "console") -> bool:
         return self.chat.add(ChatMessage(user=user, text=text, platform=platform))

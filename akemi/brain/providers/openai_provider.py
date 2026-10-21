@@ -89,7 +89,7 @@ class OpenAICompatibleProvider(LLMProvider):
             data = resp.json()
             return (data["choices"][0]["message"].get("content") or "").strip()
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
-            raise ProviderError(f"{self.name}: {exc}") from exc
+            raise ProviderError(f"{self.name}: {type(exc).__name__}: {exc}") from exc
 
     async def stream(
         self,
@@ -122,7 +122,7 @@ class OpenAICompatibleProvider(LLMProvider):
                     if delta:
                         yield delta
         except httpx.HTTPError as exc:
-            raise ProviderError(f"{self.name}: {exc}") from exc
+            raise ProviderError(f"{self.name}: {type(exc).__name__}: {exc}") from exc
 
     async def aclose(self) -> None:
         await self._client.aclose()

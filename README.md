@@ -210,6 +210,26 @@ digitar para ela, usar `/olhar`, `/pausar` e `/voltar`.
 
 O modo antigo (tudo no PC, `akemi`) continua funcionando.
 
+## Ações no PC
+
+Peça por voz ou pelo terminal:
+
+| Exemplo | O que ela faz | Pede "sim"? |
+|---|---|---|
+| "abre o Discord", "abre o vs code" | abre qualquer programa ou jogo do Menu Iniciar | não |
+| "fecha o Spotify" | fecha a janela, como clicar no X (o programa pode perguntar se quer salvar) | **sim** |
+| "pausa a música", "pula essa música" | teclas de mídia (Spotify, YouTube, etc.) | não |
+| "aumenta o volume", "abaixa o som 20%" | volume do Windows | não |
+| "pesquisa receita de bolo no YouTube" | abre a pesquisa no navegador | não |
+| "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
+| "lembra que eu gosto de café sem açúcar" | guarda na memória | não |
+
+Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
+live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as
+"livres". Lembretes ficam na memória do processo: reiniciar a Akemi apaga os
+pendentes. As ações do PC só existem no Windows e no modo local (`akemi`);
+no modo servidor + corpo elas ainda não chegam ao PC.
+
 ## Segurança: o chat nunca manda nela
 
 Tudo que vem de fora (chat, tela, áudio do PC) entra como `Trust.PUBLIC`. A

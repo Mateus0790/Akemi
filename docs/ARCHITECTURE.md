@@ -106,7 +106,7 @@ A Akemi pode rodar dividida em dois processos:
 O modelo pede ações com tags no texto, que nunca são faladas:
 
 ```
-Pode deixar! [[acao:lembrar {"texto": "o Mateus prefere café sem açúcar"}]]
+Pode deixar! [[acao:guardar_fato {"texto": "o Mateus prefere café sem açúcar"}]]
 ```
 
 Para criar uma ação nova:
