@@ -1,0 +1,99 @@
+"""Modo console: converse com a Akemi pelo terminal, sem áudio.
+
+    python -m akemi.console            # usa o provider do .env
+    python -m akemi.console --echo     # sem API key (respostas de teste)
+
+Comandos:
+    /chat <nick> <mensagem>   simula uma mensagem do chat da live
+    /tela <texto>             simula algo visto na tela
+    /audio <texto>            simula algo ouvido no áudio do PC
+    /pensar                   força um momento de pensamento
+    /estado                   mostra humor, objetivo e tarefas
+    /pausar | /voltar         pausa/retoma a autonomia
+    /sair
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+
+from akemi.core.config import Settings
+from akemi.core.events import Event
+from akemi.core.logging_setup import configure_logging
+from akemi.core.orchestrator import Akemi
+
+
+async def _ainput(prompt: str) -> str:
+    return await asyncio.to_thread(input, prompt)
+
+
+async def run(echo: bool) -> None:
+    settings = Settings()
+    if echo:
+        settings.brain_provider = "echo"
+        settings.deep_provider = None
+    configure_logging(settings.log_level, settings.log_json)
+    akemi = Akemi(settings)
+    await akemi.start()
+    print("Akemi no console. Digite /sair para encerrar, /ajuda para comandos.\n")
+    try:
+        while True:
+            try:
+                line = (await _ainput("você> ")).strip()
+            except EOFError:
+                break
+            if not line:
+                continue
+            if line in ("/sair", "/exit", "/quit"):
+                break
+            if line == "/ajuda":
+                print(__doc__)
+            elif line.startswith("/chat "):
+                parts = line.split(maxsplit=2)
+                if len(parts) < 3:
+                    print("uso: /chat <nick> <mensagem>")
+                    continue
+                ok = akemi.chat_message(parts[1], parts[2])
+                print("  (mensagem entrou no lote)" if ok else "  (mensagem bloqueada/ignorada)")
+                akemi.chat.flush()
+            elif line.startswith("/tela "):
+                akemi.observe("screen", line[6:])
+            elif line.startswith("/audio "):
+                akemi.observe("audio", line[7:])
+            elif line == "/pensar":
+                data = await akemi.mind.think(Event("tick.idle", source="console"))
+                print(f"  (pensamento: {data.get('pensamento', '—')})")
+            elif line == "/estado":
+                print(akemi.state.describe())
+            elif line == "/pausar":
+                akemi.pause.pause("console")
+                print("  (pausada: só responde a você)")
+            elif line == "/voltar":
+                akemi.pause.resume()
+                print("  (autonomia retomada)")
+            else:
+                akemi.owner_say(line)
+            await asyncio.sleep(0.1)
+    finally:
+        await akemi.stop()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Converse com a Akemi pelo terminal")
+    parser.add_argument("--echo", action="store_true", help="usa o provider offline de teste")
+    args = parser.parse_args()
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    try:
+        asyncio.run(run(args.echo))
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

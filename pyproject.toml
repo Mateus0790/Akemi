@@ -4,18 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "akemi"
-version = "0.1.0"
+version = "0.2.0"
 description = "Agente de IA autônomo para desktop Windows (estilo Jarvis)"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [{ name = "Astronyz" }]
+authors = [{ name = "Mateus0790" }]
 dependencies = [
     "numpy>=1.26,<3",
     "structlog>=24.4.0",
     "python-dotenv>=1.0.1",
     "pydantic-settings>=2.4.0",
     "pyyaml>=6.0.2",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -33,9 +34,7 @@ vision = [
     "pytesseract==0.3.13",
 ]
 brain = [
-    "anthropic==0.34.0",
-    "openai==1.51.0",
-    "ollama==0.3.3",
+    "httpx>=0.27",
 ]
 llamacpp = [
     "llama-cpp-python==0.3.1",
@@ -62,10 +61,12 @@ dev = [
     "pytest==8.3.3",
     "pytest-asyncio==0.24.0",
     "webrtcvad-wheels>=2.0.14",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
 akemi-debug = "akemi.debug:main"
+akemi = "akemi.console:main"
 
 [tool.setuptools.packages.find]
 include = ["akemi*"]

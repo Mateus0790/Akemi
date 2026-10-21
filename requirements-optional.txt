@@ -10,13 +10,9 @@ mss==9.0.1
 Pillow==10.4.0
 pytesseract==0.3.13
 
-# Cérebro / API (cloud)
-anthropic==0.34.0
-openai==1.51.0
-
-# Cérebro / local
-ollama==0.3.3
-# llama-cpp-python compiles native code — install only if you need it:
+# Cérebro: os providers usam só httpx (já no núcleo). NIM, OpenAI, Ollama,
+# llama.cpp server e Anthropic funcionam sem SDK extra.
+# llama-cpp-python compila código nativo — só se quiser rodar .gguf em-processo:
 # llama-cpp-python==0.3.1
 
 # TTS
