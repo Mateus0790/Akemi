@@ -129,3 +129,56 @@ async def test_pause_silences_autonomy_but_not_owner(tmp_path):
     await settle(akemi)
     await akemi.stop()
     assert tts.said == ["Oi!"]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    ["Sou a Akemi, a IA do Mateus.", "Oi, sou Akemi!", "Fui criada pela NVIDIA para ajudar pesquisadores.",
+     "Hey! Sou a Akemi — IA do Mateus, morando no PC dele.", "Eu sou a sua IA de análise de gráficos.",
+     "Ele me criou pra ajudar com a parte chata."],
+)
+def test_self_intro_regex(sentence):
+    from akemi.brain.mind import SELF_INTRO_RE
+
+    assert SELF_INTRO_RE.search(sentence)
+
+
+@pytest.mark.parametrize("sentence", ["Oi! Sumiu, hein.", "A Akemi aqui tá de olho.", "Sou fã de Minecraft."])
+def test_self_intro_regex_no_false_positive(sentence):
+    from akemi.brain.mind import SELF_INTRO_RE
+
+    assert not SELF_INTRO_RE.search(sentence)
+
+
+@pytest.mark.asyncio
+async def test_she_does_not_introduce_herself(tmp_path):
+    akemi, tts, _ = make_akemi(lambda m, j: "Oi! Sou a Akemi, a IA do Mateus. O que manda?", tmp_path)
+    await akemi.start()
+    akemi.owner_say("Oi Akemi")
+    await settle(akemi)
+    history = [m.content for m in akemi.mind.history]
+    akemi.owner_say("quem é você?")  # aí pode
+    await settle(akemi)
+    await akemi.stop()
+    assert tts.said[:2] == ["Oi!", "O que manda?"]
+    assert "Sou a Akemi" not in history[1]
+    assert tts.said[2:] == ["Oi!", "Sou a Akemi, a IA do Mateus.", "O que manda?"]
+
+
+@pytest.mark.asyncio
+async def test_only_intro_becomes_short_answer(tmp_path):
+    akemi, tts, _ = make_akemi(lambda m, j: "Sou a Akemi, a IA do Mateus.", tmp_path)
+    await akemi.start()
+    akemi.owner_say("Akemi, tá aí?")
+    await settle(akemi)
+    await akemi.stop()
+    assert tts.said == ["Tô aqui."]
+
+
+def test_persona_examples_in_prompt():
+    from akemi.brain.persona import Persona
+
+    p = Persona.load(owner="Fulano")
+    prompt = p.system_prompt()
+    assert "Fulano: Akemi, tá me ouvindo?" in prompt and "Akemi: Alto e claro." in prompt
+    assert "Exemplos" not in p.system_prompt(live=True)

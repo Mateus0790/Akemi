@@ -37,6 +37,19 @@ logger = structlog.get_logger()
 
 MOOD_TAG_RE = re.compile(r"\[\[\s*humor\s*:\s*([\wçãéíóú]+)\s*\]\]", re.I)
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
+# Auto-apresentação que o modelo insiste em fazer mesmo instruído a não fazer
+# ("Sou a Akemi, a IA do Mateus", "Fui criada pela NVIDIA...").
+SELF_INTRO_RE = re.compile(
+    r"\b(sou (a )?akemi|eu sou a (sua )?ia|sou (a |uma )?ia\b|(a|sua) ia do \w+|fui criad[ao]|"
+    r"criad[ao] pel[ao]|feit[ao] pel[ao] (nvidia|openai|meta|google)|desenvolvid[ao] pel[ao]|"
+    r"me (criou|fez|desenvolveu|programou))",
+    re.I,
+)
+# ...a não ser que ele pergunte justamente isso.
+IDENTITY_QUESTION = re.compile(
+    r"\b(quem (é|e) voc[eê]|o que voc[eê] (é|e)\b|quem te (criou|fez)|qual (modelo|ia)|voc[eê] (é|e) (uma )?ia)",
+    re.I,
+)
 # "o que tem na tela?", "tá vendo isso?", "olha aqui", "lê isso aí"
 SCREEN_QUESTION = re.compile(
     r"\b(tela|monitor|janela|aparec\w*|mostrando|vendo|v[eê]|olh[ae]\w*|l[eê] (isso|a[ií]|pra mim))\b", re.I
@@ -159,22 +172,42 @@ class Mind:
     ) -> str:
         provider, model = self.models.pick(route)
         streamer = SentenceStreamer()
-        full = []
+        full: list[str] = []
+        dropped: list[str] = []
+        spoken = 0
+        asked_identity = origin.kind == "owner.message" and bool(IDENTITY_QUESTION.search(origin.text))
+
+        def speak(sentence: str) -> None:
+            nonlocal spoken
+            if not asked_identity and SELF_INTRO_RE.search(sentence):
+                dropped.append(sentence)
+                logger.info("self introduction dropped", text=sentence)
+                return
+            spoken += 1
+            self.say(sentence, origin)
+
         try:
             async for chunk in provider.stream(
                 messages, model=model, max_tokens=max_tokens, temperature=self.models.temperature
             ):
                 full.append(chunk)
                 for sentence in streamer.feed(chunk):
-                    self.say(sentence, origin)
+                    speak(sentence)
         except ProviderError as exc:
             logger.error("generation failed", error=str(exc), model=model)
             if origin.trust >= Trust.OWNER:
                 self.say("Opa, meu cérebro deu uma travada. Tenta de novo?", origin)
             return ""
         for sentence in streamer.flush():
-            self.say(sentence, origin)
-        return "".join(full)
+            speak(sentence)
+        raw = "".join(full)
+        if dropped:
+            for sentence in dropped:  # nem no histórico, para não virar hábito
+                raw = raw.replace(sentence, "", 1)
+            if not spoken and origin.trust >= Trust.OWNER:
+                self.say("Tô aqui.", origin)
+                raw = "Tô aqui. " + raw
+        return raw.strip()
 
     def _apply_mood_tag(self, raw: str) -> None:
         if m := MOOD_TAG_RE.search(raw):
