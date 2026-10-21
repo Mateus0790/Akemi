@@ -1,0 +1,190 @@
+"""Ações que a Akemi pode executar, com níveis de permissão aplicados em código.
+
+Regra de ouro: **o nível de confiança vem do evento que originou o pedido, não
+do que o modelo diz**. Se a resposta foi gerada a partir do chat da live
+(Trust.PUBLIC), nenhuma ação é executada — mesmo que o LLM tenha sido
+convencido a pedir uma. Isso não depende do prompt; é verificado aqui.
+
+Formato que o modelo usa para pedir uma ação, no meio da resposta::
+
+    [[acao:lembrar {"texto": "o Mateus prefere café sem açúcar"}]]
+"""
+
+from __future__ import annotations
+
+import inspect
+import json
+import re
+import time
+from dataclasses import dataclass, field
+from enum import IntEnum
+from typing import Any, Awaitable, Callable
+
+import structlog
+
+from akemi.core.events import Trust
+
+logger = structlog.get_logger()
+
+ACTION_CALL_RE = re.compile(r"\[\[\s*acao\s*:\s*([\w.-]+)\s*(\{.*?\})?\s*\]\]", re.S | re.I)
+
+
+class Tier(IntEnum):
+    FREE = 0  # executa direto (anotar, lembrar, consultar)
+    CONFIRM = 1  # pede "sim" do dono antes (abrir programa, enviar mensagem)
+    FORBIDDEN = 2  # nunca automaticamente
+
+
+ActionFn = Callable[..., Any | Awaitable[Any]]
+
+
+@dataclass
+class Action:
+    name: str
+    description: str
+    fn: ActionFn
+    tier: Tier = Tier.FREE
+    params: dict[str, str] = field(default_factory=dict)  # nome -> descrição
+    speak_result: bool = False  # se o retorno deve ser falado (ex.: horário)
+
+
+@dataclass
+class ActionCall:
+    name: str
+    args: dict[str, Any]
+
+
+@dataclass
+class ActionResult:
+    name: str
+    status: str  # executed | pending_confirmation | denied | error | unknown
+    detail: str = ""
+    value: Any = None
+
+
+@dataclass
+class PendingConfirmation:
+    call: ActionCall
+    created_at: float = field(default_factory=time.time)
+
+
+def parse_action_calls(text: str) -> tuple[str, list[ActionCall]]:
+    """Separa o texto falado das chamadas de ação embutidas."""
+    calls: list[ActionCall] = []
+    for m in ACTION_CALL_RE.finditer(text):
+        try:
+            args = json.loads(m.group(2)) if m.group(2) else {}
+            if not isinstance(args, dict):
+                args = {}
+        except ValueError:
+            args = {}
+        calls.append(ActionCall(m.group(1).lower(), args))
+    spoken = ACTION_CALL_RE.sub("", text)
+    spoken = re.sub(r"\[\[.*?\]\]", "", spoken, flags=re.S)  # tags malformadas
+    return re.sub(r"\s+", " ", spoken).strip(), calls
+
+
+class ActionRegistry:
+    def __init__(self, confirm_timeout_s: float = 60.0) -> None:
+        self._actions: dict[str, Action] = {}
+        self._pending: PendingConfirmation | None = None
+        self.confirm_timeout_s = confirm_timeout_s
+
+    def register(
+        self,
+        name: str,
+        description: str,
+        tier: Tier = Tier.FREE,
+        params: dict[str, str] | None = None,
+        speak_result: bool = False,
+    ) -> Callable[[ActionFn], ActionFn]:
+        def deco(fn: ActionFn) -> ActionFn:
+            self._actions[name] = Action(name, description, fn, tier, params or {}, speak_result)
+            return fn
+
+        return deco
+
+    def add(self, action: Action) -> None:
+        self._actions[action.name] = action
+
+    def get(self, name: str) -> Action | None:
+        return self._actions.get(name)
+
+    def describe_for_prompt(self) -> str:
+        """Lista das ações disponíveis, para colocar no prompt do dono."""
+        if not self._actions:
+            return ""
+        lines = [
+            "Você pode executar ações escrevendo, no fim da resposta, uma tag como "
+            '[[acao:nome {"param": "valor"}]]. Só use quando o dono pedir ou for claramente útil.',
+            "Ações disponíveis:",
+        ]
+        for a in self._actions.values():
+            if a.tier == Tier.FORBIDDEN:
+                continue
+            ps = ", ".join(f"{k}: {v}" for k, v in a.params.items()) or "sem parâmetros"
+            conf = " (pede confirmação)" if a.tier == Tier.CONFIRM else ""
+            lines.append(f"- {a.name}{conf}: {a.description} [{ps}]")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------ execução
+    async def request(self, call: ActionCall, trust: Trust) -> ActionResult:
+        action = self._actions.get(call.name)
+        if action is None:
+            return ActionResult(call.name, "unknown", "ação inexistente")
+        if trust < Trust.OWNER:
+            logger.warning("action denied: untrusted origin", action=call.name, trust=trust.name)
+            return ActionResult(call.name, "denied", "origem não confiável")
+        if action.tier == Tier.FORBIDDEN:
+            return ActionResult(call.name, "denied", "ação proibida")
+        if action.tier == Tier.CONFIRM:
+            self._pending = PendingConfirmation(call)
+            return ActionResult(call.name, "pending_confirmation", self._confirm_text(action, call))
+        return await self._run(action, call)
+
+    def _confirm_text(self, action: Action, call: ActionCall) -> str:
+        args = ", ".join(f"{k}={v}" for k, v in call.args.items())
+        return f"Posso executar {action.name}{f' ({args})' if args else ''}? Diz sim ou não."
+
+    @property
+    def pending(self) -> PendingConfirmation | None:
+        if self._pending and time.time() - self._pending.created_at > self.confirm_timeout_s:
+            self._pending = None
+        return self._pending
+
+    async def resolve_confirmation(self, approved: bool, trust: Trust) -> ActionResult | None:
+        pending = self.pending
+        if pending is None:
+            return None
+        if trust < Trust.OWNER:
+            return ActionResult(pending.call.name, "denied", "só o dono confirma")
+        self._pending = None
+        if not approved:
+            return ActionResult(pending.call.name, "denied", "dono recusou")
+        action = self._actions[pending.call.name]
+        return await self._run(action, pending.call)
+
+    async def _run(self, action: Action, call: ActionCall) -> ActionResult:
+        try:
+            sig = inspect.signature(action.fn)
+            accepted = {k: v for k, v in call.args.items() if k in sig.parameters}
+            value = action.fn(**accepted)
+            if inspect.isawaitable(value):
+                value = await value
+            logger.info("action executed", action=action.name)
+            return ActionResult(action.name, "executed", "", value)
+        except Exception as exc:
+            logger.exception("action failed", action=action.name)
+            return ActionResult(action.name, "error", str(exc))
+
+
+YES_RE = re.compile(r"^\s*(sim|pode|manda|confirmo|isso|ok|beleza|bora|yes)\b", re.I)
+NO_RE = re.compile(r"^\s*(n[aã]o|cancela|para|deixa|esquece|no)\b", re.I)
+
+
+def parse_yes_no(text: str) -> bool | None:
+    if YES_RE.search(text):
+        return True
+    if NO_RE.search(text):
+        return False
+    return None

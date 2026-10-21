@@ -1,1 +1,1 @@
-"""Brain / LLM providers (not implemented yet)."""
+"""Cérebro: personalidade, estado interno, atenção e mente."""

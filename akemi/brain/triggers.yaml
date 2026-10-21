@@ -1,5 +1,35 @@
-# Placeholder for proactive trigger rules.
-# Example (not loaded yet):
-# - id: media_playing
-#   when: audio.speech
-#   action: maybe_comment
+# Regras para quando algo que a Akemi *percebe* (tela, áudio do sistema)
+# merece ser considerado para um comentário espontâneo.
+#
+# Uma regra só faz a Akemi *considerar* comentar: o modelo rápido ainda decide
+# se vale a pena, e há um intervalo mínimo entre falas espontâneas
+# (MIN_SECONDS_BETWEEN_UNPROMPTED_SPEECH).
+#
+# when:     padrão do tipo de evento (glob)
+# keywords: pelo menos uma precisa aparecer no texto (vazio = qualquer texto)
+# cooldown_s: tempo mínimo entre dois disparos da mesma regra
+# hint:     dica que vai para o modelo junto com o que foi percebido
+
+- id: erro_na_tela
+  when: ambient.screen
+  keywords: [error, erro, exception, traceback, falhou, failed, "não respondendo"]
+  cooldown_s: 300
+  hint: "Parece que apareceu um erro na tela. Se for útil, ofereça ajuda de forma breve."
+
+- id: jogo_morte
+  when: ambient.screen
+  keywords: [game over, you died, você morreu, derrota, defeat]
+  cooldown_s: 120
+  hint: "O dono parece ter perdido no jogo. Uma provocação leve ou consolo cabe aqui."
+
+- id: menciona_akemi_no_audio
+  when: ambient.audio
+  keywords: [akemi]
+  cooldown_s: 30
+  hint: "Alguém falou seu nome no áudio do computador."
+
+- id: conversa_no_audio
+  when: ambient.audio
+  keywords: []
+  cooldown_s: 600
+  hint: "Isso é o que está tocando no computador (vídeo, call, jogo). Só comente se for realmente interessante."
