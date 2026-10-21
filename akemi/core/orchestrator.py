@@ -250,7 +250,7 @@ class Akemi:
         from akemi.vision.watcher import ScreenWatcher
 
         s = self.settings
-        ocr = TesseractOCR(s.ocr_lang, s.tesseract_cmd or None)
+        ocr = TesseractOCR(s.ocr_lang, s.tesseract_cmd or None, s.tessdata_dir)
         describe = None
         if s.vision_model:
             from akemi.vision.describe import ScreenDescriber

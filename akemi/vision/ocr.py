@@ -45,7 +45,9 @@ def similarity(a: str, b: str) -> float:
 
 
 class TesseractOCR:
-    def __init__(self, lang: str = "por+eng", cmd: str | None = None) -> None:
+    def __init__(
+        self, lang: str = "por+eng", cmd: str | None = None, tessdata_dir: Path | None = None
+    ) -> None:
         try:
             import pytesseract
             from PIL import Image  # noqa: F401
@@ -64,12 +66,16 @@ class TesseractOCR:
         pytesseract.pytesseract.tesseract_cmd = exe
         self._tess = pytesseract
         self.lang = lang
+        # Idiomas numa pasta do projeto: não precisa de admin para gravar em Program Files.
+        self.config = ""
+        if tessdata_dir is not None and Path(tessdata_dir).is_dir():
+            self.config = f'--tessdata-dir "{Path(tessdata_dir).resolve()}"'
 
     def read_sync(self, frame: np.ndarray) -> str:
         from PIL import Image
 
         img = Image.fromarray(frame[..., :3] if frame.ndim == 3 else frame).convert("L")
-        return self._tess.image_to_string(img, lang=self.lang)
+        return self._tess.image_to_string(img, lang=self.lang, config=self.config)
 
     async def read(self, frame: np.ndarray) -> str:
         return await asyncio.to_thread(self.read_sync, frame)

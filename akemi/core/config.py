@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     screen_change_threshold: float = 0.06  # fração da tela que precisa mudar
     ocr_lang: str = "por+eng"
     tesseract_cmd: str = ""  # vazio = procura no PATH / pasta padrão do Windows
+    tessdata_dir: Path = Path("data/tessdata")  # idiomas do OCR (se a pasta existir)
     # Trechos de título de janela que ela nunca lê (vazio = lista padrão)
     screen_ignore_windows: list[str] = []
     # Modelo de visão para descrever a cena (jogos, vídeos). Vazio = só OCR.
