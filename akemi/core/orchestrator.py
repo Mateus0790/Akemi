@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 
 import structlog
 
@@ -17,6 +16,7 @@ from akemi.brain.triggers import TriggerSet
 from akemi.core.config import Settings
 from akemi.core.events import Event, EventBus, Priority, Trust
 from akemi.core.pause import PauseSwitch
+from akemi.core.senses import Senses
 from akemi.live.chat import ChatBatcher, ChatMessage
 from akemi.safety.moderation import Moderator
 from akemi.storage.memory import Memory
@@ -99,13 +99,9 @@ class Akemi:
             max_batches_per_minute=settings.chat_max_replies_per_minute,
         )
         self._tasks: list[asyncio.Task] = []
-        self._audio_capture = None
-        self._mic = None
-        self._stt = None
-        self.voice_input = None
-        self.screen = None
-        self._screen_grabber = None
-        self._vision_provider: LLMProvider | None = None
+        self.senses = Senses(
+            self.bus, settings, self.speaker, self.pause, vision_fallback=self.models.fast
+        )
 
     # ----------------------------------------------------------- entradas
     def owner_say(self, text: str, source: str = "console") -> None:
@@ -147,18 +143,9 @@ class Akemi:
                 self.settings.twitch_nick, self.settings.twitch_oauth_token,
             )
             self._tasks.append(asyncio.create_task(twitch.run(), name="twitch"))
-        if self.settings.system_audio_enabled:
-            self._start_system_audio()
-        if self.settings.mic_enabled:
-            try:
-                self._start_mic()
-            except Exception as exc:
-                logger.error("mic unavailable", error=str(exc))
-        if self.settings.screen_enabled:
-            try:
-                self._start_screen()
-            except Exception as exc:
-                logger.error("screen vision unavailable", error=str(exc))
+        self.senses.start()
+        if self.senses.voice_input is not None:
+            self.bus.subscribe("speech.finished", self._on_speech_finished)
         logger.info(
             "akemi started",
             fast=self.models.fast_model,
@@ -166,124 +153,27 @@ class Akemi:
             provider=self.settings.brain_provider,
         )
 
-    # ------------------------------------------------------------ áudio
-    def _transcriber(self):
-        if self._stt is None:
-            from akemi.stt.transcriber import WhisperTranscriber
+    def _on_speech_finished(self, event: Event) -> None:
+        # Depois que ela responde a você (ou fala por conta própria), dá
+        # para continuar a conversa sem repetir o nome dela.
+        if event.payload.get("origin_trust", 0) >= Trust.SYSTEM:
+            self.senses.mark_exchange()
 
-            self._stt = WhisperTranscriber(self.settings.whisper_model, self.settings.stt_language)
-        return self._stt
+    @property
+    def screen(self):
+        return self.senses.screen
 
-    def _frame_bridge(self, name: str, handler) -> callable:
-        """Liga a thread do PortAudio ao loop asyncio: devolve o callback de frame
-        e cria a task que entrega cada frame a ``handler``."""
-        loop = asyncio.get_running_loop()
-        frames: asyncio.Queue[bytes] = asyncio.Queue(maxsize=500)
-
-        def put(frame: bytes) -> None:
-            if not frames.full():
-                frames.put_nowait(frame)
-
-        def on_frame(frame: bytes) -> None:  # thread do PortAudio
-            loop.call_soon_threadsafe(put, frame)
-
-        async def pump() -> None:
-            while True:
-                try:
-                    await handler(await frames.get())
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    logger.exception("audio pipeline failed", pipeline=name)
-
-        self._tasks.append(asyncio.create_task(pump(), name=name))
-        return on_frame
-
-    def _start_system_audio(self) -> None:
-        if sys.platform != "win32":
-            logger.warning("system audio capture only works on Windows; skipping")
-            return
-        from akemi.audio.capture import AudioCapture
-        from akemi.audio.vad import VAD
-        from akemi.stt.listener import AmbientAudioInput
-
-        stt = self._transcriber()
-        ambient = AmbientAudioInput(
-            self.bus, stt.transcribe, VAD(self.settings.vad_aggressiveness).is_speech,
-            self.speaker, self.pause,
-        )
-        self._audio_capture = AudioCapture()
-        self._audio_capture.start(callback=self._frame_bridge("system-audio", ambient.feed))
-
-    def _start_mic(self) -> None:
-        from akemi.audio.mic import MicCapture
-        from akemi.audio.vad import VAD
-        from akemi.stt.listener import OwnerVoiceInput
-
-        stt = self._transcriber()
-        device = self.settings.mic_device or None
-        if device is not None and device.isdigit():
-            device = int(device)
-        self.voice_input = OwnerVoiceInput(
-            self.bus, stt.transcribe, VAD(self.settings.vad_aggressiveness).is_speech,
-            self.speaker, self.pause,
-            mode=self.settings.mic_mode,
-            wake_words=self.settings.wake_words,
-            followup_window_s=self.settings.followup_window_s,
-            barge_in_rms=self.settings.barge_in_rms,
-        )
-
-        def on_speech_finished(event: Event) -> None:
-            # Depois que ela responde a você (ou fala por conta própria), dá
-            # para continuar a conversa sem repetir o nome dela.
-            if event.payload.get("origin_trust", 0) >= Trust.SYSTEM:
-                self.voice_input.mark_exchange()
-
-        self.bus.subscribe("speech.finished", on_speech_finished)
-        self._mic = MicCapture(device)
-        self._mic.start(self._frame_bridge("mic", self.voice_input.feed))
-
-    # ------------------------------------------------------------- visão
-    def _start_screen(self) -> None:
-        from akemi.vision.ocr import TesseractOCR
-        from akemi.vision.screenshot import ScreenGrabber, active_window_title
-        from akemi.vision.watcher import ScreenWatcher
-
-        s = self.settings
-        ocr = TesseractOCR(s.ocr_lang, s.tesseract_cmd or None, s.tessdata_dir)
-        describe = None
-        if s.vision_model:
-            from akemi.vision.describe import ScreenDescriber
-
-            provider_name = s.vision_provider or s.brain_provider
-            if provider_name != s.brain_provider:
-                self._vision_provider = build_provider(provider_name, s)
-            describe = ScreenDescriber(self._vision_provider or self.models.fast, s.vision_model).describe
-        self._screen_grabber = ScreenGrabber(s.screen_monitor)
-        self.screen = ScreenWatcher(
-            self.bus, self._screen_grabber.grab, ocr.read, self.pause,
-            window_title=active_window_title,
-            describe=describe,
-            interval_s=s.screen_interval_s,
-            describe_interval_s=s.vision_describe_interval_s,
-            change_threshold=s.screen_change_threshold,
-            ignored_windows=s.screen_ignore_windows or None,
-        )
-        self._tasks.append(asyncio.create_task(self.screen.run(), name="screen"))
+    @property
+    def voice_input(self):
+        return self.senses.voice_input
 
     async def stop(self) -> None:
-        if self._audio_capture is not None:
-            self._audio_capture.stop()
-        if self._mic is not None:
-            self._mic.stop()
+        await self.senses.stop()
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
-        if self._screen_grabber is not None:
-            self._screen_grabber.close()
         if self.state_path:
             self.state.save(self.state_path)
-        providers = [self.models.fast, self.models.deep, self._vision_provider]
-        for p in {id(p): p for p in providers if p is not None}.values():
+        for p in {id(self.models.fast): self.models.fast, id(self.models.deep): self.models.deep}.values():
             await p.aclose()
         self.memory.close()

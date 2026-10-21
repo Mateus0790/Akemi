@@ -144,6 +144,53 @@ desliga a visão na hora.
 Para ligar o chat da Twitch, preencha `TWITCH_CHANNEL` no `.env`. Para ouvir o
 áudio do PC: `pip install -e ".[audio,stt]"` e `SYSTEM_AUDIO_ENABLED=true`.
 
+## Funcionando 24h (servidor + PC)
+
+A Akemi pode ser dividida em duas partes:
+
+- **Núcleo**, num servidor sempre ligado (Docker, ex. ZimaOS): mente, memória,
+  humor, pensamentos e chat da live. Não precisa de GPU, porque o LLM fica no NIM.
+- **Corpo**, no seu PC: microfone, tela, áudio do PC e voz. Conecta ao núcleo
+  pela rede de casa.
+
+Com o PC desligado, ela continua pensando e respondendo no chat. Quando o PC
+liga, ela ganha olhos e voz de novo. A memória é uma só.
+
+### 1. Núcleo no ZimaOS
+
+1. Gere uma senha para ligar os dois lados:
+   `python -c "import secrets; print(secrets.token_urlsafe(24))"`
+2. No ZimaOS: **App Store → "+" → Instalar app personalizado → Importar** e
+   cole o [`docker-compose.yml`](docker-compose.yml). Troque `NVIDIA_API_KEY`
+   e `AKEMI_TOKEN` (os valores com `TROQUE`).
+3. A memória fica em `/DATA/AppData/akemi` no Zima.
+
+A imagem `ghcr.io/mateus0790/akemi:latest` é publicada pelo GitHub Actions a
+cada merge na `main`. Na primeira vez, deixe o pacote público no GitHub (perfil
+→ Packages → akemi → Package settings → Change visibility → Public); senão o
+ZimaOS não consegue baixar.
+
+Para conferir: abra `http://IP-DO-ZIMA:8765/saude` no navegador.
+
+### 2. Corpo no PC
+
+No `.env` do PC, coloque o mesmo `AKEMI_TOKEN` e o endereço do Zima:
+
+```
+AKEMI_TOKEN=a-mesma-senha-do-servidor
+SERVER_URL=ws://192.168.0.10:8765
+```
+
+```powershell
+pip install -e ".[corpo,mic,tts,vision]"
+akemi-corpo --voz --mic --tela
+```
+
+O corpo reconecta sozinho se o servidor reiniciar. No terminal dele dá para
+digitar para ela, usar `/olhar`, `/pausar` e `/voltar`.
+
+O modo antigo (tudo no PC, `akemi`) continua funcionando.
+
 ## Segurança: o chat nunca manda nela
 
 Tudo que vem de fora (chat, tela, áudio do PC) entra como `Trust.PUBLIC`. A

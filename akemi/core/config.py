@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     piper_volume: float = 1.0
     tts_output_device: str | None = None  # nome/índice da saída de áudio (vazio = padrão)
 
+    # --- Núcleo/corpo (akemi-servidor no ZimaOS, akemi-corpo no PC) ---
+    akemi_token: str = ""  # segredo compartilhado entre núcleo e corpo
+    server_host: str = "0.0.0.0"
+    server_port: int = 8765
+    server_url: str = ""  # onde o corpo acha o núcleo, ex. ws://192.168.0.10:8765
+
     # --- Rede ---
     hermes_api_url: str = "http://localhost:5000"
     control_api_host: str = "127.0.0.1"

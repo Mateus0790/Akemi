@@ -1,0 +1,53 @@
+"""Protocolo entre o núcleo (servidor) e o corpo (PC do dono), em JSON sobre WebSocket.
+
+Corpo → núcleo
+    ``hello``          {token, version}       primeira mensagem, obrigatória
+    ``owner_message``  {text}                 o dono falou/digitou (Trust.OWNER)
+    ``owner_speech_started`` {}               o dono começou a falar (interrompe)
+    ``ambient``        {kind, text}           tela/áudio do PC (Trust.PUBLIC)
+    ``spoken``         {id, status}           terminou de falar o ``say`` ``id``
+    ``pause`` / ``resume`` {}                 liga/desliga a autonomia
+
+Núcleo → corpo
+    ``welcome``        {paused, owner}        autenticado
+    ``say``            {id, text, origin_trust}  fale isto
+    ``stop``           {}                     pare de falar e descarte a fila
+    ``paused``         {paused}               estado da pausa mudou
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+VERSION = 1
+MAX_TEXT = 4000
+AMBIENT_KINDS = {"screen", "audio"}
+
+# Códigos de fechamento (4000–4999 são livres para a aplicação).
+CLOSE_UNAUTHORIZED = 4401
+CLOSE_REPLACED = 4409
+CLOSE_BAD_MESSAGE = 4400
+
+
+class ProtocolError(ValueError):
+    pass
+
+
+def encode(type_: str, **fields: Any) -> str:
+    return json.dumps({"type": type_, **fields}, ensure_ascii=False)
+
+
+def decode(raw: str | bytes) -> dict[str, Any]:
+    """Valida o formato básico. Texto grande é cortado em vez de recusado."""
+    try:
+        msg = json.loads(raw)
+    except ValueError as exc:
+        raise ProtocolError("JSON inválido") from exc
+    if not isinstance(msg, dict) or not isinstance(msg.get("type"), str):
+        raise ProtocolError("mensagem sem 'type'")
+    if "text" in msg:
+        if not isinstance(msg["text"], str):
+            raise ProtocolError("'text' precisa ser string")
+        msg["text"] = msg["text"][:MAX_TEXT]
+    return msg

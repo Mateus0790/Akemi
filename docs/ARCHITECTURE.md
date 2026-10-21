@@ -37,6 +37,8 @@ VTuber de IA.
 | `storage/memory.py` | Memória episódica (SQLite FTS5) + fatos. |
 | `stt/` | Segmentação de fala pelo VAD + Whisper. |
 | `vision/` | Tela: detecção de mudança, OCR e descrição por modelo de visão → `ambient.screen`. |
+| `core/senses.py` | Liga microfone, áudio do PC e tela a um barramento (usado no modo local e no corpo). |
+| `net/` | Núcleo como servidor WebSocket (`server.py`), corpo no PC (`body.py`) e protocolo. |
 | `tts/base.py` | `Speaker`: único caminho para falar; interrompe quando o dono começa a falar. |
 
 ## Dois modelos
@@ -58,6 +60,30 @@ Não é consciência real; é continuidade. O que dá essa sensação:
    ajusta o humor e *decide* se fala algo — na maioria das vezes fica quieta.
 3. **Memória** de conversas e fatos, recuperada por relevância.
 4. **Humor** muda com as interações (`[[humor:X]]`) e decai com o tempo.
+
+## Núcleo e corpo
+
+A Akemi pode rodar dividida em dois processos:
+
+```
+ NÚCLEO (servidor, Docker)                       CORPO (PC do dono)
+ Mind, memória, estado, chat da live    ◄──WS──► Senses (mic, tela, áudio do PC)
+ Speaker ─ RemoteVoice ── "say" ─────────────────► BodyVoice (Piper)
+         ◄──────────────── "spoken" ──────────────
+```
+
+- `core/senses.py` é usado pelos dois modos (tudo no PC com `akemi`, ou só no corpo).
+- O `Speaker` continua no núcleo, então a moderação de saída roda antes de
+  qualquer coisa ir para a rede. O `RemoteVoice` espera o corpo confirmar
+  (`spoken`) para que `speaking` e a interrupção funcionem como no modo local.
+- O protocolo está em `net/protocol.py`. A primeira mensagem do corpo é
+  `hello` com o `AKEMI_TOKEN` (comparado em tempo constante). Sem ela, a
+  conexão é fechada com 4401.
+- Só o corpo autenticado fala como dono. `ambient` (tela e áudio) entra como
+  `Trust.PUBLIC`, igual ao modo local.
+- Um corpo novo substitui o anterior (4409). Sem corpo, a fala é descartada e
+  ela continua pensando e respondendo no chat.
+- `GET /saude` responde em HTTP para o healthcheck do Docker.
 
 ## Segurança
 
@@ -103,8 +129,8 @@ async def tocar_musica(nome: str) -> str:
    quadros (`frame_diff.py`) → OCR do Tesseract quando a tela muda e assenta, ou
    quando a janela em foco muda → modelo de visão opcional (`describe.py`) →
    `ambient.screen` (Trust.PUBLIC). Janelas sensíveis (senha, banco) são puladas.
-4. Hermes: mover chat, timers e memória para o servidor (24/7) e conversar com
-   a Akemi pelo barramento via LAN.
+4. ~~Servidor 24h~~ — núcleo (`net/server.py`, Docker) + corpo (`net/body.py`, PC)
+   ligados por WebSocket na LAN. Ver "Núcleo e corpo" acima.
 5. Busca semântica (embeddings) na memória.
 6. Avatar (VTube Studio API) reagindo ao humor.
 7. Self-improve por último.

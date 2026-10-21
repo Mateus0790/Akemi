@@ -1,0 +1,64 @@
+# Núcleo da Akemi no ZimaOS (ou qualquer Docker).
+#
+# ZimaOS: App Store → "+" (Instalar app personalizado) → Importar → cole este
+# arquivo e troque os valores marcados com TROQUE.
+#
+# Depois, no PC: akemi-corpo --servidor ws://IP-DO-ZIMA:8765 --voz --mic --tela
+
+name: akemi
+services:
+  akemi:
+    image: ghcr.io/mateus0790/akemi:latest
+    container_name: akemi
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # Memória, humor e estado. Sobrevive a atualizações do container.
+      - /DATA/AppData/akemi:/app/data
+    environment:
+      TZ: America/Sao_Paulo
+      OWNER_NAME: Mateus
+      BRAIN_PROVIDER: nim
+      FAST_MODEL: meta/llama-3.1-8b-instruct
+      DEEP_MODEL: meta/llama-3.3-70b-instruct
+      NVIDIA_API_KEY: TROQUE-pela-sua-chave-nvapi
+      # Senha entre o servidor e o PC (a mesma no .env do PC). Gere uma com:
+      #   python -c "import secrets; print(secrets.token_urlsafe(24))"
+      AKEMI_TOKEN: TROQUE-por-um-segredo-longo
+      # Chat da Twitch (vazio = desligado)
+      TWITCH_CHANNEL: ""
+      IDLE_THINK_INTERVAL_S: "180"
+      LOG_LEVEL: INFO
+    x-casaos:
+      envs:
+        - container: NVIDIA_API_KEY
+          description:
+            pt_BR: Chave da NVIDIA (build.nvidia.com)
+        - container: AKEMI_TOKEN
+          description:
+            pt_BR: Senha que o PC usa para conectar (mínimo 16 caracteres)
+      ports:
+        - container: "8765"
+          description:
+            pt_BR: Conexão com o corpo (PC)
+      volumes:
+        - container: /app/data
+          description:
+            pt_BR: Memória e estado da Akemi
+
+x-casaos:
+  architectures:
+    - amd64
+  main: akemi
+  category: Utilities
+  author: Mateus0790
+  developer: Mateus0790
+  title:
+    en_us: Akemi
+    pt_BR: Akemi
+  tagline:
+    pt_BR: Núcleo da IA Akemi (mente, memória e chat 24h)
+  description:
+    pt_BR: Mente, memória e chat da live da Akemi. O PC conecta como corpo (voz, microfone, tela).
+  port_map: "8765"
