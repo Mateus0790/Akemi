@@ -33,3 +33,9 @@
   keywords: []
   cooldown_s: 600
   hint: "Isso é o que está tocando no computador (vídeo, call, jogo). Só comente se for realmente interessante."
+
+- id: mudou_a_tela
+  when: ambient.screen
+  keywords: []
+  cooldown_s: 900
+  hint: "Isso é o que está na tela do dono agora (janela, cena, texto). Só comente se for algo realmente interessante ou engraçado; na maioria das vezes fique quieta."

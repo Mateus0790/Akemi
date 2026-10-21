@@ -87,6 +87,20 @@ class Settings(BaseSettings):
     whisper_model: str = "small"
     stt_language: str = "pt"
 
+    # --- Visão ---
+    screen_enabled: bool = False  # olhar a tela (pip install -e ".[vision]" + Tesseract)
+    screen_monitor: int = 1  # 1 = principal, 2 = segundo monitor...
+    screen_interval_s: float = 5.0
+    screen_change_threshold: float = 0.06  # fração da tela que precisa mudar
+    ocr_lang: str = "por+eng"
+    tesseract_cmd: str = ""  # vazio = procura no PATH / pasta padrão do Windows
+    # Trechos de título de janela que ela nunca lê (vazio = lista padrão)
+    screen_ignore_windows: list[str] = []
+    # Modelo de visão para descrever a cena (jogos, vídeos). Vazio = só OCR.
+    vision_model: str = ""
+    vision_provider: ProviderName | None = None  # default = brain_provider
+    vision_describe_interval_s: float = 45.0
+
     @property
     def effective_deep_provider(self) -> ProviderName:
         return self.deep_provider or self.brain_provider

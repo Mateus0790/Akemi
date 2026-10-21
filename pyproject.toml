@@ -29,8 +29,8 @@ stt = [
     "ctranslate2==4.4.0",
 ]
 vision = [
-    "mss==9.0.1",
-    "Pillow==10.4.0",
+    "mss>=9.0.1",
+    "Pillow>=10.4",
     "pytesseract==0.3.13",
 ]
 brain = [

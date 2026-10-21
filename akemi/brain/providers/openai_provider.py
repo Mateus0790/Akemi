@@ -36,10 +36,19 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
     @staticmethod
-    def _body(messages, model, max_tokens, temperature, json_mode=False, stream=False):
+    def _content(m: Message):
+        if not m.images:
+            return m.content
+        return [{"type": "text", "text": m.content}] + [
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
+            for img in m.images
+        ]
+
+    @classmethod
+    def _body(cls, messages, model, max_tokens, temperature, json_mode=False, stream=False):
         body = {
             "model": model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": [{"role": m.role, "content": cls._content(m)} for m in messages],
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,
