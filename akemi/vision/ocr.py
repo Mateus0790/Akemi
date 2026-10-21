@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import os
 import re
 import shutil
 import sys
@@ -67,15 +68,16 @@ class TesseractOCR:
         self._tess = pytesseract
         self.lang = lang
         # Idiomas numa pasta do projeto: não precisa de admin para gravar em Program Files.
-        self.config = ""
+        # (Via variável de ambiente: o pytesseract repassa aspas do --tessdata-dir
+        # literalmente no Windows, e caminhos com espaço quebram sem elas.)
         if tessdata_dir is not None and Path(tessdata_dir).is_dir():
-            self.config = f'--tessdata-dir "{Path(tessdata_dir).resolve()}"'
+            os.environ["TESSDATA_PREFIX"] = str(Path(tessdata_dir).resolve())
 
     def read_sync(self, frame: np.ndarray) -> str:
         from PIL import Image
 
         img = Image.fromarray(frame[..., :3] if frame.ndim == 3 else frame).convert("L")
-        return self._tess.image_to_string(img, lang=self.lang, config=self.config)
+        return self._tess.image_to_string(img, lang=self.lang)
 
     async def read(self, frame: np.ndarray) -> str:
         return await asyncio.to_thread(self.read_sync, frame)
