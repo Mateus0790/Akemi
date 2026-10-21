@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 
 import structlog
 
 from akemi.actions.builtin import register_builtin_actions
 from akemi.actions.registry import ActionRegistry
+from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import LLMProvider, build_provider
@@ -26,22 +28,36 @@ logger = structlog.get_logger()
 
 
 def build_tts(settings: Settings) -> TTSEngine:
-    if settings.tts_engine == "piper":
-        from akemi.tts.piper_engine import PiperTTS, SoundDevicePlayer
+    if settings.tts_engine == "console":
+        return ConsoleTTS()
+    from akemi.tts.piper_engine import SoundDevicePlayer
 
-        device = settings.tts_output_device or None
-        if device is not None and device.isdigit():
-            device = int(device)
-        try:
-            return PiperTTS(
-                settings.piper_model_path,
-                speaker_id=settings.piper_speaker_id,
-                length_scale=settings.piper_length_scale,
-                volume=settings.piper_volume,
-                player=SoundDevicePlayer(device) if device is not None else None,
+    device = settings.tts_output_device or None
+    if device is not None and device.isdigit():
+        device = int(device)
+    try:
+        player = SoundDevicePlayer(device) if device is not None else None
+        if settings.tts_engine == "kokoro":
+            from akemi.tts.kokoro_engine import KokoroTTS
+
+            return KokoroTTS(
+                settings.kokoro_model_path,
+                settings.kokoro_voices_path,
+                voice=settings.kokoro_voice,
+                speed=settings.kokoro_speed,
+                player=player,
             )
-        except RuntimeError as exc:
-            logger.error("piper unavailable, falling back to console", error=str(exc))
+        from akemi.tts.piper_engine import PiperTTS
+
+        return PiperTTS(
+            settings.piper_model_path,
+            speaker_id=settings.piper_speaker_id,
+            length_scale=settings.piper_length_scale,
+            volume=settings.piper_volume,
+            player=player,
+        )
+    except RuntimeError as exc:
+        logger.error("tts unavailable, falling back to console", engine=settings.tts_engine, error=str(exc))
     return ConsoleTTS()
 
 
@@ -55,6 +71,7 @@ class Akemi:
         tts: TTSEngine | None = None,
         memory: Memory | None = None,
         persist: bool = True,
+        desktop_actions: bool = True,
     ) -> None:
         self.settings = settings
         self.bus = EventBus()
@@ -76,6 +93,12 @@ class Akemi:
 
         self.actions = ActionRegistry()
         register_builtin_actions(self.actions, self.memory, self.state)
+        self.reminders = Reminders(self._remind)
+        register_reminder_actions(self.actions, self.reminders)
+        if sys.platform == "win32" and desktop_actions:
+            from akemi.actions.desktop import register_desktop_actions
+
+            register_desktop_actions(self.actions)
 
         self.mind = Mind(
             self.bus,
@@ -107,6 +130,12 @@ class Akemi:
     def owner_say(self, text: str, source: str = "console") -> None:
         self.bus.publish(Event("owner.speech_started", source=source, trust=Trust.OWNER, priority=Priority.URGENT))
         self.bus.publish(Event("owner.message", {"text": text}, source=source, trust=Trust.OWNER, priority=Priority.HIGH))
+
+    def _remind(self, text: str) -> None:
+        self.bus.publish(
+            Event("speech.say", {"text": f"Ei, {self.settings.owner_name}, lembrete: {text}", "origin": "lembrete"},
+                  source="lembrete", trust=Trust.SYSTEM, priority=Priority.HIGH)
+        )
 
     def chat_message(self, user: str, text: str, platform: str = "console") -> bool:
         return self.chat.add(ChatMessage(user=user, text=text, platform=platform))
@@ -144,6 +173,9 @@ class Akemi:
             )
             self._tasks.append(asyncio.create_task(twitch.run(), name="twitch"))
         self.senses.start()
+        if self.senses.screen is not None:
+            screen = self.senses.screen
+            self.mind.look = lambda: screen.step(force=True, publish=False)
         if self.senses.voice_input is not None:
             self.bus.subscribe("speech.finished", self._on_speech_finished)
         logger.info(

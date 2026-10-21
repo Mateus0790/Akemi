@@ -97,3 +97,41 @@ def test_memory_facts_and_recall():
     assert hits and "ZimaOS" in hits[0].text
     assert m.forget_fact("ADS") == 1 and m.facts() == []
     m.close()
+
+
+# ------------------------------------------------- pensamentos repetidos
+# Pensamentos reais salvos no state.json do dono (resumidos).
+REPEATED = [
+    "Estou acompanhando o trabalho do Mateus na branch fix/tessdata-windows. Parece que ele está testando "
+    "algo relacionado à leitura de imagens, já que várias janelas de BongoCat e Claude aparecem.",
+    "Observando o Mateus testar a leitura de imagens na branch fix/tessdata-windows. Várias janelas de "
+    "BongoCat e Claude estão abertas, mostrando resultados de análise OCR.",
+    "Estou observando o Mateus trabalhar na branch fix/tessdata-windows. Ele parece estar testando a "
+    "leitura de imagens de gráficos, com várias janelas de análise aberta.",
+]
+
+
+def test_repeated_thoughts_are_not_stored():
+    from akemi.brain.state import InnerState
+
+    s = InnerState()
+    assert s.remember_thought(REPEATED[0])
+    assert not s.remember_thought(REPEATED[1])
+    assert not s.remember_thought(REPEATED[2])
+    assert s.remember_thought("Queria que ele me deixasse escolher a música da live hoje.")
+    assert len(s.recent_thoughts) == 2
+
+
+def test_old_state_file_is_cleaned_on_load():
+    from akemi.brain.state import InnerState
+
+    s = InnerState.from_dict({"mood": "curiosa", "recent_thoughts": REPEATED + [REPEATED[0]]})
+    assert len(s.recent_thoughts) == 1 and s.mood == "curiosa"
+
+
+def test_long_thought_is_trimmed():
+    from akemi.brain.state import MAX_THOUGHT_CHARS, InnerState
+
+    s = InnerState()
+    s.remember_thought("palavra " * 200)
+    assert len(s.recent_thoughts[0]) <= MAX_THOUGHT_CHARS

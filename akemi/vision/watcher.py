@@ -75,10 +75,11 @@ class ScreenWatcher:
         norm = normalize(title)
         return any(w in norm for w in self.ignored)
 
-    async def step(self, *, force: bool = False, now: float | None = None) -> str | None:
+    async def step(self, *, force: bool = False, publish: bool = True, now: float | None = None) -> str | None:
         """Uma olhada na tela. Devolve o texto publicado (ou ``None``).
 
-        ``force`` ignora a detecção de mudança (comando ``/olhar`` do console).
+        ``force`` ignora a detecção de mudança (comando ``/olhar``, ou o dono
+        perguntou da tela). Com ``publish=False`` só devolve o texto.
         """
         if self.pause and self.pause.paused:
             return None
@@ -120,6 +121,8 @@ class ScreenWatcher:
         if text:
             parts.append(f"Texto na tela:\n{text}")
         observed = "\n".join(parts)
+        if not publish:
+            return observed
         self.bus.publish(
             Event(
                 "ambient.screen",

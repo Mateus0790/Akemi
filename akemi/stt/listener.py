@@ -20,7 +20,7 @@ import structlog
 from akemi.core.events import Event, EventBus, Priority, Trust
 from akemi.core.pause import PauseSwitch
 
-from .filters import contains_wake_word, is_echo, is_hallucination
+from .filters import contains_wake_word, is_bare_wake_word, is_echo, is_hallucination
 from .transcriber import SpeechSegmenter
 
 logger = structlog.get_logger()
@@ -58,8 +58,14 @@ class OwnerVoiceInput:
         followup_window_s: float = 20.0,
         barge_in_rms: float = 1500.0,
         end_silence_ms: int = 700,
+        min_avg_logprob: float = -0.8,
+        max_no_speech_prob: float = 0.5,
     ) -> None:
         self.bus = bus
+        # Sem o nome dela, só aceita o que o Whisper ouviu com segurança;
+        # e nunca aceita o que ele acha que nem é fala.
+        self.min_avg_logprob = min_avg_logprob
+        self.max_no_speech_prob = max_no_speech_prob
         self.transcribe = transcribe
         self.vad = is_speech
         self.speech_state = speech_state
@@ -84,6 +90,9 @@ class OwnerVoiceInput:
     def _drop(self, reason: str, text: str = "") -> None:
         self.dropped[reason] = self.dropped.get(reason, 0) + 1
         logger.debug("mic transcript dropped", reason=reason, text=text[:80])
+
+    def _low_confidence(self, transcript: str) -> bool:
+        return getattr(transcript, "avg_logprob", 0.0) < self.min_avg_logprob
 
     def mark_exchange(self, ts: float | None = None) -> None:
         """Chamado quando a Akemi responde: abre a janela de continuação sem
@@ -112,10 +121,11 @@ class OwnerVoiceInput:
 
     async def handle_segment(self, segment: bytes, now: float | None = None) -> str | None:
         try:
-            text = (await self.transcribe(segment)).strip()
+            raw = await self.transcribe(segment)
         except Exception as exc:
             logger.error("mic transcription failed", error=str(exc))
             return None
+        text = raw.strip()
         now = now or time.time()
         if is_hallucination(text):
             self._drop("hallucination", text)
@@ -123,11 +133,29 @@ class OwnerVoiceInput:
         if is_echo(text, self.speech_state.recent_speech, now=now):
             self._drop("echo", text)
             return None
+        if getattr(raw, "no_speech_prob", 0.0) > self.max_no_speech_prob:
+            # Chiado/ruído. O Whisper tende a "ouvir" o nome dela (vem na dica
+            # de vocabulário), então isso vale mesmo quando o texto é "Akemi".
+            self._drop("no_speech", text)
+            return None
+        called = self.mode == "wake_word" and contains_wake_word(text, self.wake_words)
         if not self.addressed(text, now):
             # Você falando com outra pessoa: não é para ela, e não guardamos.
             self._drop("not_addressed", text)
             return None
+        if not called and self._low_confidence(raw):
+            # Ruído ou a voz dela vazando, transcritos como frase sem sentido.
+            self._drop("low_confidence", text)
+            return None
         self.last_exchange_at = now
+        if called and is_bare_wake_word(text, self.wake_words):
+            # Só o chamado: para de falar (se estiver) e espera o pedido.
+            logger.info("wake word heard, listening")
+            self.bus.publish(
+                Event("owner.speech_started", source="mic", trust=Trust.OWNER, priority=Priority.URGENT)
+            )
+            self.bus.publish(Event("owner.wake", source="mic", trust=Trust.OWNER, priority=Priority.HIGH))
+            return None
         logger.info("owner said", text=text)
         self.bus.publish(
             Event("owner.speech_started", source="mic", trust=Trust.OWNER, priority=Priority.URGENT)

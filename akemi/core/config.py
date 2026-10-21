@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     # --- Cérebro: dois modelos (rápido para triagem/respostas curtas,
     # profundo para planejar e conversas complexas) ---
     brain_provider: ProviderName = "nim"
-    fast_model: str = "meta/llama-3.1-8b-instruct"
-    deep_model: str = "meta/llama-3.3-70b-instruct"
+    fast_model: str = "nvidia/ising-calibration-1.5-31b"
+    deep_model: str = "openai/gpt-oss-20b"
     deep_provider: ProviderName | None = None  # default = brain_provider
     llm_timeout_s: float = 30.0
     llm_temperature: float = 0.8
@@ -58,7 +58,12 @@ class Settings(BaseSettings):
     twitch_oauth_token: str = ""
 
     # --- Voz ---
-    tts_engine: Literal["console", "piper"] = "console"
+    tts_engine: Literal["console", "piper", "kokoro"] = "console"
+    # Kokoro: voz feminina pt-BR (pf_dora). Ver akemi/tts/kokoro_engine.py
+    kokoro_model_path: Path = Path("data/voices/kokoro/kokoro-v1.0.int8.onnx")
+    kokoro_voices_path: Path = Path("data/voices/kokoro/voices-v1.0.bin")
+    kokoro_voice: str = "pf_dora"
+    kokoro_speed: float = 1.0  # >1 fala mais rápido
     piper_model_path: Path = Path("data/voices/pt_BR-faber-medium.onnx")
     piper_speaker_id: int | None = None
     piper_length_scale: float = 1.0  # >1 fala mais devagar

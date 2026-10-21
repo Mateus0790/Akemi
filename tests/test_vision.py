@@ -250,3 +250,74 @@ async def test_error_on_screen_makes_her_comment(tmp_path):
     await akemi.stop()
     assert tts.said == ["Opa, apareceu um erro aí."]
     assert "[ambient.screen] Janela: cmd.exe" in context
+
+
+def test_prepare_for_ocr_inverts_dark_screens():
+    from akemi.vision.ocr import prepare_for_ocr
+
+    dark = np.full((4, 4, 3), 20, dtype=np.uint8)
+    light = np.full((4, 4, 3), 230, dtype=np.uint8)
+    assert prepare_for_ocr(dark).tolist() == np.full((4, 4), 235).tolist()
+    assert prepare_for_ocr(light).tolist() == np.full((4, 4), 230).tolist()
+
+
+def test_lines_from_data_drops_low_confidence_and_keeps_layout():
+    from akemi.vision.ocr import lines_from_data
+
+    data = {
+        "text": ["Procurar", "", "Gutodirictom", "Onde", "está", "Criar"],
+        "conf": [96, -1, 31, 91, 88, "95.5"],
+        "block_num": [1, 1, 1, 2, 2, 1],
+        "par_num": [1, 1, 1, 1, 1, 1],
+        "line_num": [1, 1, 2, 1, 1, 3],
+    }
+    # Colunas diferentes (blocos) não se misturam numa linha só.
+    assert lines_from_data(data, 60) == "Procurar\nOnde está\nCriar"
+    assert "Gutodirictom" in lines_from_data(data, 0)
+
+
+def test_detector_reads_screen_that_never_settles():
+    """Texto chegando sem parar (ou vídeo): lê mesmo assim a cada max_wait_frames."""
+    d = ChangeDetector(threshold=0.06, max_wait_frames=3)
+    frames = [thumbnail(frame(v)) for v in (0, 0, 60, 120, 180, 240)]
+    results = [d.update(f) for f in frames]
+    assert results == [False, True, False, False, False, True]
+
+
+@pytest.mark.asyncio
+async def test_step_without_publish_returns_text_only():
+    screen = FakeScreen(title="Firefox", text="Texto bem legível na tela")
+    bus = FakeBus()
+    w = watcher(screen, bus)
+    assert "Texto bem legível" in await w.step(force=True, publish=False)
+    assert bus.events == []
+
+
+@pytest.mark.asyncio
+async def test_question_about_screen_looks_now(tmp_path):
+    def responder(msgs, json_mode):
+        return "Tô vendo o VS Code." if "VS Code" in msgs[0].content else "Não sei."
+
+    settings = Settings(
+        _env_file=None, brain_provider="echo", data_dir=tmp_path, idle_think_interval_s=0,
+        min_seconds_between_unprompted_speech=0,
+    )
+    tts, llm = RecordingTTS(), EchoProvider(responder)
+    akemi = Akemi(settings, fast=llm, deep=llm, tts=tts, persist=False)
+    looks = []
+
+    async def look():
+        looks.append(1)
+        return "Janela: main.py - VS Code"
+
+    akemi.mind.look = look
+    await akemi.start()
+    akemi.owner_say("que horas são?")  # não é sobre a tela: não olha
+    await akemi.bus.drain()
+    await asyncio.sleep(0.2)
+    akemi.owner_say("Akemi, o que tem na tela agora?")
+    await akemi.bus.drain()
+    await asyncio.sleep(0.3)
+    await akemi.stop()
+    assert looks == [1]
+    assert tts.said[-1] == "Tô vendo o VS Code."

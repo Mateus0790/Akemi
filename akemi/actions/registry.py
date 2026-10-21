@@ -7,7 +7,7 @@ convencido a pedir uma. Isso não depende do prompt; é verificado aqui.
 
 Formato que o modelo usa para pedir uma ação, no meio da resposta::
 
-    [[acao:lembrar {"texto": "o Mateus prefere café sem açúcar"}]]
+    [[acao:guardar_fato {"texto": "o Mateus prefere café sem açúcar"}]]
 """
 
 from __future__ import annotations
@@ -46,6 +46,8 @@ class Action:
     tier: Tier = Tier.FREE
     params: dict[str, str] = field(default_factory=dict)  # nome -> descrição
     speak_result: bool = False  # se o retorno deve ser falado (ex.: horário)
+    confirm: str = ""  # pergunta de confirmação, com os parâmetros: "Fecho o {nome}?"
+    example: tuple[str, str] | None = None  # (pedido do dono, tag): modelos seguem exemplos
 
 
 @dataclass
@@ -97,9 +99,11 @@ class ActionRegistry:
         tier: Tier = Tier.FREE,
         params: dict[str, str] | None = None,
         speak_result: bool = False,
+        confirm: str = "",
+        example: tuple[str, str] | None = None,
     ) -> Callable[[ActionFn], ActionFn]:
         def deco(fn: ActionFn) -> ActionFn:
-            self._actions[name] = Action(name, description, fn, tier, params or {}, speak_result)
+            self._actions[name] = Action(name, description, fn, tier, params or {}, speak_result, confirm, example)
             return fn
 
         return deco
@@ -116,7 +120,9 @@ class ActionRegistry:
             return ""
         lines = [
             "Você pode executar ações escrevendo, no fim da resposta, uma tag como "
-            '[[acao:nome {"param": "valor"}]]. Só use quando o dono pedir ou for claramente útil.',
+            '[[acao:nome {"param": "valor"}]]. Use quando o dono pedir ou for claramente útil.',
+            "IMPORTANTE: só a tag faz a ação acontecer. Nunca diga que abriu, fechou, pausou ou "
+            "agendou algo sem escrever a tag correspondente.",
             "Ações disponíveis:",
         ]
         for a in self._actions.values():
@@ -124,7 +130,8 @@ class ActionRegistry:
                 continue
             ps = ", ".join(f"{k}: {v}" for k, v in a.params.items()) or "sem parâmetros"
             conf = " (pede confirmação)" if a.tier == Tier.CONFIRM else ""
-            lines.append(f"- {a.name}{conf}: {a.description} [{ps}]")
+            ex = f' Ex.: "{a.example[0]}" -> {a.example[1]}' if a.example else ""
+            lines.append(f"- {a.name}{conf}: {a.description} [{ps}].{ex}")
         return "\n".join(lines)
 
     # ------------------------------------------------------------ execução
@@ -143,6 +150,11 @@ class ActionRegistry:
         return await self._run(action, call)
 
     def _confirm_text(self, action: Action, call: ActionCall) -> str:
+        if action.confirm:
+            try:
+                return action.confirm.format(**call.args) + " Diz sim ou não."
+            except (KeyError, IndexError, ValueError):
+                pass
         args = ", ".join(f"{k}={v}" for k, v in call.args.items())
         return f"Posso executar {action.name}{f' ({args})' if args else ''}? Diz sim ou não."
 

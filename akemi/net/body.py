@@ -311,7 +311,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Corpo da Akemi (conecta ao núcleo)")
     parser.add_argument("--servidor", help="endereço do núcleo, ex. ws://192.168.0.10:8765")
-    parser.add_argument("--voz", action="store_true", help="fala em voz alta com o Piper")
+    parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão Piper)")
     parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--audio-pc", action="store_true", help="ouve o áudio do PC")
@@ -320,7 +320,8 @@ def main() -> None:
 
     settings = Settings()
     if args.voz:
-        settings.tts_engine = "piper"
+        if settings.tts_engine == "console":  # TTS_ENGINE do .env escolhe a voz
+            settings.tts_engine = "piper"
     settings.mic_enabled |= args.mic
     settings.screen_enabled |= args.tela
     settings.system_audio_enabled |= args.audio_pc

@@ -7,7 +7,9 @@ interação e outra (e entre reinicializações).
 
 from __future__ import annotations
 
+import difflib
 import json
+import re
 import time
 from collections import deque
 from dataclasses import asdict, dataclass, field
@@ -18,6 +20,25 @@ import structlog
 logger = structlog.get_logger()
 
 MOODS = ("neutra", "animada", "curiosa", "focada", "entediada", "irritadinha", "sonolenta", "orgulhosa")
+MAX_THOUGHT_CHARS = 240
+
+
+def is_repeated(thought: str, previous, threshold: float = 0.55) -> bool:
+    """Parecido demais com algum pensamento anterior (mesmas palavras, outra ordem).
+
+    Usa a sobreposição sobre o menor dos dois: reformulações do mesmo
+    pensamento ficaram >= 0,58 nos dados reais; pensamentos diferentes, <= 0,44.
+    """
+    words = set(re.findall(r"\w{3,}", thought.lower()))
+    if not words:
+        return False
+    for old in previous:
+        old_words = set(re.findall(r"\w{3,}", old.lower()))
+        if old_words and len(words & old_words) / min(len(words), len(old_words)) >= threshold:
+            return True
+        if difflib.SequenceMatcher(None, thought.lower(), old.lower()).ratio() >= 0.8:
+            return True
+    return False
 
 
 @dataclass
@@ -79,11 +100,18 @@ class InnerState:
     def open_tasks(self) -> list[Task]:
         return [t for t in self.tasks if not t.done]
 
-    def remember_thought(self, thought: str) -> None:
-        thought = thought.strip()
-        if thought:
-            self.recent_thoughts.append(thought)
-            self.touch()
+    def remember_thought(self, thought: str) -> bool:
+        """Guarda o pensamento, a menos que seja uma repetição dos recentes.
+
+        Pensamentos voltam no prompt; guardar repetições faz o modelo copiar o
+        mesmo parágrafo para sempre.
+        """
+        thought = " ".join(thought.split())[:MAX_THOUGHT_CHARS]
+        if not thought or is_repeated(thought, self.recent_thoughts):
+            return False
+        self.recent_thoughts.append(thought)
+        self.touch()
+        return True
 
     def touch(self) -> None:
         self.last_updated_at = time.time()
@@ -117,9 +145,14 @@ class InnerState:
     def from_dict(cls, d: dict) -> "InnerState":
         d = dict(d)
         d["tasks"] = [Task(**t) for t in d.get("tasks", [])]
-        d["recent_thoughts"] = deque(d.get("recent_thoughts", []), maxlen=8)
+        thoughts = d.pop("recent_thoughts", []) or []
         known = cls.__dataclass_fields__.keys()
-        return cls(**{k: v for k, v in d.items() if k in known})
+        state = cls(**{k: v for k, v in d.items() if k in known})
+        last_updated = state.last_updated_at
+        for t in thoughts:  # limpa repetições salvas por versões antigas
+            state.remember_thought(str(t))
+        state.last_updated_at = last_updated
+        return state
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

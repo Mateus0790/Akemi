@@ -2,8 +2,8 @@
 # Prefer: pip install -e ".[stt,vision,brain,tts,net,data,self-improve,windows]"
 
 # STT
-faster-whisper==1.0.3
-ctranslate2==4.4.0
+faster-whisper>=1.1,<2
+ctranslate2>=4.5,<5
 
 # Visão
 mss>=9.0.1

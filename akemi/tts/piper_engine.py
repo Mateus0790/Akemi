@@ -56,7 +56,10 @@ class SoundDevicePlayer:
 
     def play(self, pcm16: bytes, sample_rate: int, channels: int, cancel: threading.Event) -> None:
         stream = self._ensure_stream(sample_rate, channels)
-        step = max(2 * channels, sample_rate * channels * 2 * self.block_ms // 1000)
+        # Em quadros inteiros: 22050 Hz × 50 ms daria 2205 bytes, que corta uma
+        # amostra int16 no meio e o PortAudio recusa.
+        frames = max(1, sample_rate * self.block_ms // 1000)
+        step = frames * channels * 2
         for i in range(0, len(pcm16), step):
             if cancel.is_set():
                 stream.abort()  # descarta o que está no buffer da placa

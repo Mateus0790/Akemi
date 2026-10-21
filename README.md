@@ -83,6 +83,25 @@ Para deixar a voz ligada sempre, coloque `TTS_ENGINE=piper` no `.env`. Outras
 vozes pt-BR: `pt_BR-cadu-medium`, `pt_BR-jeff-medium`, `pt_BR-edresson-low`
 (troque também `PIPER_MODEL_PATH`). `PIPER_LENGTH_SCALE` ajusta a velocidade.
 
+### Voz feminina (Kokoro)
+
+O Piper só tem vozes masculinas em pt-BR. O **Kokoro** tem a `pf_dora`, também
+offline e com qualidade melhor (cerca de 120 MB):
+
+```powershell
+pip install -e ".[kokoro]"
+mkdir data\voices\kokoro
+foreach ($f in "kokoro-v1.0.int8.onnx","voices-v1.0.bin") { curl.exe -L -o data\voices\kokoro\$f https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/$f }
+```
+
+No `.env`: `TTS_ENGINE=kokoro`. Depois é só `akemi --voz`. `KOKORO_SPEED`
+ajusta a velocidade (0.95 deixa a fala mais calma).
+
+O modelo int8 é pequeno, mas soa um pouco áspero. Para uma voz mais suave,
+baixe também `kokoro-v1.0.fp16.onnx` (177 MB, mesmo link) e use
+`KOKORO_MODEL_PATH=data/voices/kokoro/kokoro-v1.0.fp16.onnx`. Na CPU ele
+gera a voz na mesma velocidade.
+
 Para a live, aponte `TTS_OUTPUT_DEVICE` para um cabo virtual (ex.: VB-Cable) e
 capture esse dispositivo no OBS. Enquanto ela fala, o áudio do sistema não é
 transcrito, para ela não "ouvir a si mesma".
@@ -190,6 +209,26 @@ O corpo reconecta sozinho se o servidor reiniciar. No terminal dele dá para
 digitar para ela, usar `/olhar`, `/pausar` e `/voltar`.
 
 O modo antigo (tudo no PC, `akemi`) continua funcionando.
+
+## Ações no PC
+
+Peça por voz ou pelo terminal:
+
+| Exemplo | O que ela faz | Pede "sim"? |
+|---|---|---|
+| "abre o Discord", "abre o vs code" | abre qualquer programa ou jogo do Menu Iniciar | não |
+| "fecha o Spotify" | fecha a janela, como clicar no X (o programa pode perguntar se quer salvar) | **sim** |
+| "pausa a música", "pula essa música" | teclas de mídia (Spotify, YouTube, etc.) | não |
+| "aumenta o volume", "abaixa o som 20%" | volume do Windows | não |
+| "pesquisa receita de bolo no YouTube" | abre a pesquisa no navegador | não |
+| "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
+| "lembra que eu gosto de café sem açúcar" | guarda na memória | não |
+
+Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
+live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as
+"livres". Lembretes ficam na memória do processo: reiniciar a Akemi apaga os
+pendentes. As ações do PC só existem no Windows e no modo local (`akemi`);
+no modo servidor + corpo elas ainda não chegam ao PC.
 
 ## Segurança: o chat nunca manda nela
 

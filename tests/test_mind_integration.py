@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from akemi.actions.registry import Tier
 from akemi.brain.providers import EchoProvider
 from akemi.core.config import Settings
 from akemi.core.orchestrator import Akemi
@@ -36,7 +37,7 @@ async def settle(akemi, t=0.3):
 @pytest.mark.asyncio
 async def test_owner_message_speaks_and_runs_free_action(tmp_path):
     def responder(msgs, json_mode):
-        return 'Anotado, chefe. [[acao:lembrar {"texto": "Mateus gosta de café"}]] [[humor:orgulhosa]]'
+        return 'Anotado, chefe. [[acao:guardar_fato {"texto": "Mateus gosta de café"}]] [[humor:orgulhosa]]'
 
     akemi, tts, _ = make_akemi(responder, tmp_path)
     await akemi.start()
@@ -72,18 +73,20 @@ async def test_chat_cannot_trigger_actions_even_if_llm_obeys(tmp_path):
 @pytest.mark.asyncio
 async def test_confirm_action_needs_owner_yes(tmp_path):
     opened = []
-    replies = iter(['Abrindo! [[acao:abrir_site {"url": "github.com"}]]', "nunca usado"])
+    replies = iter(['Fechando! [[acao:fechar_teste {"nome": "Spotify"}]]', "nunca usado"])
 
     akemi, tts, _ = make_akemi(lambda m, j: next(replies), tmp_path)
-    akemi.actions.get("abrir_site").fn = lambda url: opened.append(url) or "aberto"
+    akemi.actions.register("fechar_teste", "fecha", tier=Tier.CONFIRM, confirm="Fecho o {nome}?")(
+        lambda nome: opened.append(nome) or "fechado"
+    )
     await akemi.start()
-    akemi.owner_say("abre o github")
+    akemi.owner_say("fecha o spotify")
     await settle(akemi)
-    assert opened == [] and "Diz sim ou não" in tts.said[-1]
+    assert opened == [] and tts.said[-1] == "Fecho o Spotify? Diz sim ou não."
     akemi.owner_say("sim")
     await settle(akemi)
     await akemi.stop()
-    assert opened == ["github.com"] and tts.said[-1] == "Feito."
+    assert opened == ["Spotify"] and tts.said[-1] == "Feito."
 
 
 @pytest.mark.asyncio
@@ -129,3 +132,113 @@ async def test_pause_silences_autonomy_but_not_owner(tmp_path):
     await settle(akemi)
     await akemi.stop()
     assert tts.said == ["Oi!"]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    ["Sou a Akemi, a IA do Mateus.", "Oi, sou Akemi!", "Fui criada pela NVIDIA para ajudar pesquisadores.",
+     "Hey! Sou a Akemi — IA do Mateus, morando no PC dele.", "Eu sou a sua IA de análise de gráficos.",
+     "Ele me criou pra ajudar com a parte chata."],
+)
+def test_self_intro_regex(sentence):
+    from akemi.brain.mind import SELF_INTRO_RE
+
+    assert SELF_INTRO_RE.search(sentence)
+
+
+@pytest.mark.parametrize("sentence", ["Oi! Sumiu, hein.", "A Akemi aqui tá de olho.", "Sou fã de Minecraft."])
+def test_self_intro_regex_no_false_positive(sentence):
+    from akemi.brain.mind import SELF_INTRO_RE
+
+    assert not SELF_INTRO_RE.search(sentence)
+
+
+@pytest.mark.asyncio
+async def test_she_does_not_introduce_herself(tmp_path):
+    akemi, tts, _ = make_akemi(lambda m, j: "Oi! Sou a Akemi, a IA do Mateus. O que manda?", tmp_path)
+    await akemi.start()
+    akemi.owner_say("Oi Akemi")
+    await settle(akemi)
+    history = [m.content for m in akemi.mind.history]
+    akemi.owner_say("quem é você?")  # aí pode
+    await settle(akemi)
+    await akemi.stop()
+    assert tts.said[:2] == ["Oi!", "O que manda?"]
+    assert "Sou a Akemi" not in history[1]
+    assert tts.said[2:] == ["Oi!", "Sou a Akemi, a IA do Mateus.", "O que manda?"]
+
+
+@pytest.mark.asyncio
+async def test_only_intro_becomes_short_answer(tmp_path):
+    akemi, tts, _ = make_akemi(lambda m, j: "Sou a Akemi, a IA do Mateus.", tmp_path)
+    await akemi.start()
+    akemi.owner_say("Akemi, tá aí?")
+    await settle(akemi)
+    await akemi.stop()
+    assert tts.said == ["Tô aqui."]
+
+
+def test_persona_examples_in_prompt():
+    from akemi.brain.persona import Persona
+
+    p = Persona.load(owner="Fulano")
+    prompt = p.system_prompt()
+    assert "Fulano: Akemi, tá me ouvindo?" in prompt and "Akemi: Alto e claro." in prompt
+    assert "Exemplos" not in p.system_prompt(live=True)
+
+
+@pytest.mark.asyncio
+async def test_idle_thinking_needs_something_new(tmp_path):
+    from akemi.core.events import Event
+
+    calls = []
+
+    def responder(msgs, json_mode):
+        calls.append(msgs[-1].content)
+        return '{"pensamento": "pensamento %d sobre algo diferente", "humor": "curiosa", "falar": ""}' % len(calls)
+
+    akemi, tts, _ = make_akemi(responder, tmp_path)
+    tick = Event("tick.idle", source="timer")
+    await akemi.mind.on_idle_tick(tick)
+    await akemi.mind.on_idle_tick(tick)  # nada aconteceu: não pensa de novo
+    assert len(calls) == 1
+    akemi.mind.max_quiet_s = 0  # muito tempo quieta: pensa mesmo sem novidade
+    await akemi.mind.on_idle_tick(tick)
+    assert len(calls) == 2
+    akemi.mind.max_quiet_s = 1800
+    akemi.mind._novelty += 1  # algo novo (tela, conversa, chat)
+    await akemi.mind.on_idle_tick(tick)
+    assert len(calls) == 3
+    assert "NÃO repita" in calls[-1] and "pensamento 1" in calls[-1]
+    await akemi.stop()
+
+
+@pytest.mark.asyncio
+async def test_promise_without_tag_is_recovered(tmp_path):
+    def responder(msgs, json_mode):
+        if msgs[-1].content.startswith("Você disse que ia fazer"):
+            return '[[acao:criar_tarefa {"descricao": "beber água"}]]'
+        return "Pode deixar, vou te lembrar de beber água!"
+
+    akemi, tts, _ = make_akemi(responder, tmp_path)
+    await akemi.start()
+    akemi.owner_say("me lembra de beber água")
+    await settle(akemi)
+    await akemi.stop()
+    assert [t.description for t in akemi.state.open_tasks] == ["beber água"]
+
+
+@pytest.mark.asyncio
+async def test_no_recovery_for_normal_chat(tmp_path):
+    calls = []
+
+    def responder(msgs, json_mode):
+        calls.append(msgs[-1].content)
+        return "Oi! Sumiu, hein."
+
+    akemi, tts, _ = make_akemi(responder, tmp_path)
+    await akemi.start()
+    akemi.owner_say("oi")
+    await settle(akemi)
+    await akemi.stop()
+    assert len(calls) == 1

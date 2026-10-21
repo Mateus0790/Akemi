@@ -14,9 +14,11 @@ Fluxo::
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import structlog
@@ -36,6 +38,28 @@ logger = structlog.get_logger()
 
 MOOD_TAG_RE = re.compile(r"\[\[\s*humor\s*:\s*([\wçãéíóú]+)\s*\]\]", re.I)
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
+# Promessa de ação sem a tag ("vou te lembrar", "abrindo o Discord", "anotado").
+ACTION_PROMISE_RE = re.compile(
+    r"\b((vou|j[aá] vou|deixa que eu|pode deixar que eu)\s+(te\s+)?(lembrar|avisar|abrir|fechar|pausar|tocar|pesquisar|anotar|guardar|aumentar|abaixar|baixar|pular|mutar)|te (lembro|aviso)|(eu )?me lembro|guardo|(abrindo|fechando|pausando|pesquisando|anotando|guardando|pulando)|anotad[oa]|guardad[oa])\b",
+    re.I,
+)
+# Auto-apresentação que o modelo insiste em fazer mesmo instruído a não fazer
+# ("Sou a Akemi, a IA do Mateus", "Fui criada pela NVIDIA...").
+SELF_INTRO_RE = re.compile(
+    r"\b(sou (a )?akemi|eu sou a (sua )?ia|sou (a |uma )?ia\b|(a|sua) ia do \w+|fui criad[ao]|"
+    r"criad[ao] pel[ao]|feit[ao] pel[ao] (nvidia|openai|meta|google)|desenvolvid[ao] pel[ao]|"
+    r"me (criou|fez|desenvolveu|programou))",
+    re.I,
+)
+# ...a não ser que ele pergunte justamente isso.
+IDENTITY_QUESTION = re.compile(
+    r"\b(quem (é|e) voc[eê]|o que voc[eê] (é|e)\b|quem te (criou|fez)|qual (modelo|ia)|voc[eê] (é|e) (uma )?ia)",
+    re.I,
+)
+# "o que tem na tela?", "tá vendo isso?", "olha aqui", "lê isso aí"
+SCREEN_QUESTION = re.compile(
+    r"\b(tela|monitor|janela|aparec\w*|mostrando|vendo|v[eê]|olh[ae]\w*|l[eê] (isso|a[ií]|pra mim))\b", re.I
+)
 
 MOOD_INSTRUCTION = (
     "Se o seu humor mudar com essa interação, inclua no fim a tag [[humor:X]] "
@@ -121,6 +145,14 @@ class Mind:
         self.history: deque[Message] = deque(maxlen=20)
         self.live_history: deque[Message] = deque(maxlen=10)
         self.ambient: deque[tuple[float, str, str]] = deque(maxlen=15)
+        # Conta o que aconteceu (conversa, chat, percepção). Sem novidade desde
+        # o último pensamento, ela não pensa de novo: sairia o mesmo pensamento.
+        self._novelty = 0
+        self._novelty_at_last_thought = -1
+        self._last_thought_at = 0.0
+        self.max_quiet_s = 1800.0  # mesmo sem novidade, pensa de vez em quando
+        # Olhar a tela na hora (definido quando a visão está ligada).
+        self.look: Callable[[], Awaitable[str | None]] | None = None
         self._owner_lock = asyncio.Lock()
         self._live_lock = asyncio.Lock()
         self._think_lock = asyncio.Lock()
@@ -152,22 +184,62 @@ class Mind:
     ) -> str:
         provider, model = self.models.pick(route)
         streamer = SentenceStreamer()
-        full = []
+        full: list[str] = []
+        dropped: list[str] = []
+        spoken = 0
+        asked_identity = origin.kind == "owner.message" and bool(IDENTITY_QUESTION.search(origin.text))
+
+        def speak(sentence: str) -> None:
+            nonlocal spoken
+            if not asked_identity and SELF_INTRO_RE.search(sentence):
+                dropped.append(sentence)
+                logger.info("self introduction dropped", text=sentence)
+                return
+            spoken += 1
+            self.say(sentence, origin)
+
         try:
             async for chunk in provider.stream(
                 messages, model=model, max_tokens=max_tokens, temperature=self.models.temperature
             ):
                 full.append(chunk)
                 for sentence in streamer.feed(chunk):
-                    self.say(sentence, origin)
+                    speak(sentence)
         except ProviderError as exc:
             logger.error("generation failed", error=str(exc), model=model)
             if origin.trust >= Trust.OWNER:
                 self.say("Opa, meu cérebro deu uma travada. Tenta de novo?", origin)
             return ""
         for sentence in streamer.flush():
-            self.say(sentence, origin)
-        return "".join(full)
+            speak(sentence)
+        raw = "".join(full)
+        if dropped:
+            for sentence in dropped:  # nem no histórico, para não virar hábito
+                raw = raw.replace(sentence, "", 1)
+            if not spoken and origin.trust >= Trust.OWNER:
+                self.say("Tô aqui.", origin)
+                raw = "Tô aqui. " + raw
+        return raw.strip()
+
+    async def _recover_action_tags(self, messages: list[Message], raw: str) -> list:
+        """Ela prometeu fazer algo ("vou te lembrar", "abrindo") mas não escreveu a
+        tag. Pergunta de novo, só pela tag, para a promessa não ficar vazia."""
+        ask = (
+            "Você disse que ia fazer uma ação, mas não escreveu a tag, então nada aconteceu. "
+            "Responda SOMENTE com a(s) tag(s) [[acao:...]] necessária(s). "
+            "Se nenhuma ação da lista serve, responda vazio."
+        )
+        try:
+            fix = await self.models.fast.complete(
+                [*messages, Message("assistant", raw), Message("user", ask)],
+                model=self.models.fast_model, max_tokens=80, temperature=0.2,
+            )
+        except ProviderError as exc:
+            logger.warning("action tag recovery failed", error=str(exc))
+            return []
+        calls = parse_action_calls(fix)[1]
+        logger.info("action tags recovered", actions=[c.name for c in calls])
+        return calls
 
     def _apply_mood_tag(self, raw: str) -> None:
         if m := MOOD_TAG_RE.search(raw):
@@ -212,8 +284,18 @@ class Mind:
         if decision.route == Route.IGNORE:
             return
         self.state.last_owner_interaction_at = time.time()
+        self._novelty += 1
 
         async with self._owner_lock:
+            if self.look is not None and SCREEN_QUESTION.search(text):
+                # Perguntou da tela: olha agora em vez de usar uma leitura antiga.
+                try:
+                    seen = await self.look()
+                except Exception as exc:
+                    logger.warning("fresh screen look failed", error=str(exc))
+                    seen = None
+                if seen:
+                    self.ambient.append((time.time(), "ambient.screen", seen))
             # Resposta a um pedido de confirmação pendente?
             if self.actions.pending is not None:
                 yn = parse_yes_no(text)
@@ -238,6 +320,8 @@ class Mind:
                 return
             self._apply_mood_tag(raw)
             spoken, calls = parse_action_calls(raw)
+            if not calls and ACTION_PROMISE_RE.search(spoken):
+                calls = await self._recover_action_tags(messages, raw)
             for call in calls:
                 result = await self.actions.request(call, event.trust)
                 logger.info("action requested", action=call.name, status=result.status)
@@ -247,11 +331,21 @@ class Mind:
                     action = self.actions.get(call.name)
                     if action and action.speak_result and result.value:
                         self.say(str(result.value), event)
+                    elif not spoken and isinstance(result.value, str) and result.value not in ("", "ok"):
+                        # Fez sem dizer nada: confirma em poucas palavras.
+                        self.say(result.value, event)
                 elif result.status == "error":
                     self.say(f"Não consegui: {result.detail}", event)
 
-            self.history.append(Message("user", text))
-            self.history.append(Message("assistant", spoken))
+            # Quando ela só executou a ação, a tag entra no histórico: sem resposta
+            # nenhuma, o modelo via pedidos seguidos e se perdia no formato. E o
+            # NIM recusa mensagem de assistente vazia.
+            reply = spoken.strip() or " ".join(
+                f"[[acao:{c.name} {json.dumps(c.args, ensure_ascii=False)}]]" for c in calls
+            )
+            if reply:
+                self.history.append(Message("user", text))
+                self.history.append(Message("assistant", reply))
             self.memory.add_episode("conversa", f"{self.owner}: {text}\nAkemi: {spoken}")
             self._save_state()
 
@@ -260,6 +354,7 @@ class Mind:
         decision = self.attention.decide(event, self.state, paused=self.pause.paused)
         if decision.route == Route.IGNORE:
             return
+        self._novelty += 1
         msgs = event.payload.get("messages", [])
         if not msgs:
             return
@@ -287,8 +382,9 @@ class Mind:
             for call in calls:
                 # Vai ser negado (Trust.PUBLIC) — passamos mesmo assim para ficar no log.
                 await self.actions.request(call, event.trust)
-            self.live_history.append(Message("user", lines))
-            self.live_history.append(Message("assistant", spoken))
+            if spoken.strip():
+                self.live_history.append(Message("user", lines))
+                self.live_history.append(Message("assistant", spoken))
             self.memory.add_episode("live", f"chat: {lines}\nAkemi: {spoken}")
 
     # ====================================================== percepção ambiente
@@ -298,6 +394,7 @@ class Mind:
         if decision.route == Route.IGNORE or not text:
             return
         self.ambient.append((event.ts, event.kind, text))
+        self._novelty += 1
         if decision.route != Route.CONSIDER or decision.trigger is None:
             return
         rule = decision.trigger
@@ -324,17 +421,31 @@ class Mind:
     async def on_idle_tick(self, event: Event) -> None:
         if self.pause.paused or self._think_lock.locked():
             return
+        nothing_new = self._novelty == self._novelty_at_last_thought
+        if nothing_new and time.time() - self._last_thought_at < self.max_quiet_s:
+            logger.debug("idle think skipped: nothing new")
+            return
         async with self._think_lock:
             self.state.decay()
             await self.think(event)
 
     async def think(self, origin: Event) -> dict:
         """Um "momento de consciência": reflete, ajusta humor e talvez fala."""
+        self._novelty_at_last_thought = self._novelty
+        self._last_thought_at = time.time()
         system = self.persona.system_prompt(extra=self._context_block())
+        already = list(self.state.recent_thoughts)[-3:]
+        avoid = (
+            "Você já pensou isto (NÃO repita nem reformule):\n" + "\n".join(f"- {t}" for t in already) + "\n"
+            if already
+            else ""
+        )
         prompt = (
-            "Momento de pensamento (ninguém está falando com você). Reflita sobre o que "
-            "percebeu, suas tarefas e seu humor. Responda só com JSON:\n"
-            '{"pensamento": "uma frase íntima, não falada", '
+            "Momento de pensamento (ninguém está falando com você).\n"
+            f"{avoid}"
+            "Pense em algo NOVO: o que mudou, uma lembrança, uma ideia, uma vontade, algo sobre "
+            "você mesma. Se nada novo aconteceu, deixe o pensamento vazio. Responda só com JSON:\n"
+            '{"pensamento": "uma frase curta (até 20 palavras), íntima, não falada", '
             f'"humor": "um de {list(MOODS)}", '
             '"falar": "frase curta para dizer em voz alta, ou vazio se for melhor ficar quieta"}'
         )
@@ -352,8 +463,10 @@ class Mind:
         data = parse_json_object(raw)
         thought = str(data.get("pensamento", "")).strip()
         if thought:
-            self.state.remember_thought(thought)
-            logger.info("thought", text=thought)
+            if self.state.remember_thought(thought):
+                logger.info("thought", text=thought)
+            else:
+                logger.info("thought repeated, dropped", text=thought)
         if mood := data.get("humor"):
             self.state.set_mood(str(mood), 0.5)
         speak = str(data.get("falar", "") or "").strip()

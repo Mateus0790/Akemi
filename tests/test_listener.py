@@ -145,3 +145,61 @@ async def test_ambient_skips_while_speaking_or_paused():
     for f in [LOUD] * 20 + [SILENCE] * 40:
         await amb.feed(f)
     assert kinds(events) == ["ambient.audio"] and events[0].trust == Trust.PUBLIC
+
+
+# ------------------------------------------- chamado sozinho e confiança
+@pytest.mark.parametrize("text", ["Akemi", "Akemi.", "Alô, Akemi!", "ei a kemi", "Oi Aquemi?"])
+def test_bare_wake_word(text):
+    from akemi.stt.filters import is_bare_wake_word
+
+    assert is_bare_wake_word(text, ["akemi"])
+
+
+@pytest.mark.parametrize("text", ["Akemi, que horas são?", "Akemi abre o Discord", "que horas são"])
+def test_not_bare_wake_word(text):
+    from akemi.stt.filters import is_bare_wake_word
+
+    assert not is_bare_wake_word(text, ["akemi"])
+
+
+@pytest.mark.asyncio
+async def test_bare_wake_word_waits_for_the_request():
+    vi, events, _ = make(["Akemi.", "que horas são?"])
+    assert await vi.handle_segment(b"x", now=1000.0) is None
+    assert kinds(events) == ["owner.speech_started", "owner.wake"]  # parou de falar, escutando
+    assert await vi.handle_segment(b"x", now=1004.0) == "que horas são?"
+    assert kinds(events)[-1] == "owner.message" and events[-1].text == "que horas são?"
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_needs_her_name():
+    from akemi.stt.transcriber import Transcript
+
+    noise = Transcript("de sésar.", avg_logprob=-1.3, no_speech_prob=0.2)
+    silence = Transcript("Seza. Tá bom.", avg_logprob=-0.3, no_speech_prob=0.9)
+    called = Transcript("Akemi, abre o Discord", avg_logprob=-1.0, no_speech_prob=0.1)
+    vi, events, _ = make([noise, silence, called])
+    vi.mark_exchange(1000.0)  # dentro da janela de continuação
+    assert await vi.handle_segment(b"x", now=1002.0) is None
+    assert await vi.handle_segment(b"x", now=1003.0) is None
+    assert vi.dropped == {"low_confidence": 1, "no_speech": 1}
+    # Com o nome dela, aceita mesmo com confiança baixa.
+    assert await vi.handle_segment(b"x", now=1004.0) == "Akemi, abre o Discord"
+
+
+@pytest.mark.asyncio
+async def test_noise_heard_as_her_name_is_dropped():
+    """Medido no PC do dono: chiado vira "Akemi" com no_speech_prob 0,88."""
+    from akemi.stt.transcriber import Transcript
+
+    vi, events, speech = make([Transcript("Akemi", avg_logprob=-0.84, no_speech_prob=0.88)])
+    speech.speaking = True
+    assert await vi.handle_segment(b"x", now=1000.0) is None
+    assert events == []  # não interrompe a fala dela
+
+
+def test_transcript_is_a_str_with_confidence():
+    from akemi.stt.transcriber import Transcript
+
+    t = Transcript(" oi ", -0.4, 0.1)
+    assert t == " oi " and t.strip() == "oi" and t.avg_logprob == -0.4 and t.no_speech_prob == 0.1
