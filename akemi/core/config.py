@@ -58,7 +58,12 @@ class Settings(BaseSettings):
     twitch_oauth_token: str = ""
 
     # --- Voz ---
-    tts_engine: Literal["console", "piper"] = "console"
+    tts_engine: Literal["console", "piper", "kokoro"] = "console"
+    # Kokoro: voz feminina pt-BR (pf_dora). Ver akemi/tts/kokoro_engine.py
+    kokoro_model_path: Path = Path("data/voices/kokoro/kokoro-v1.0.int8.onnx")
+    kokoro_voices_path: Path = Path("data/voices/kokoro/voices-v1.0.bin")
+    kokoro_voice: str = "pf_dora"
+    kokoro_speed: float = 1.0  # >1 fala mais rápido
     piper_model_path: Path = Path("data/voices/pt_BR-faber-medium.onnx")
     piper_speaker_id: int | None = None
     piper_length_scale: float = 1.0  # >1 fala mais devagar

@@ -83,6 +83,20 @@ Para deixar a voz ligada sempre, coloque `TTS_ENGINE=piper` no `.env`. Outras
 vozes pt-BR: `pt_BR-cadu-medium`, `pt_BR-jeff-medium`, `pt_BR-edresson-low`
 (troque também `PIPER_MODEL_PATH`). `PIPER_LENGTH_SCALE` ajusta a velocidade.
 
+### Voz feminina (Kokoro)
+
+O Piper só tem vozes masculinas em pt-BR. O **Kokoro** tem a `pf_dora`, também
+offline e com qualidade melhor (cerca de 120 MB):
+
+```powershell
+pip install -e ".[kokoro]"
+mkdir data\voices\kokoro
+foreach ($f in "kokoro-v1.0.int8.onnx","voices-v1.0.bin") { curl.exe -L -o data\voices\kokoro\$f https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/$f }
+```
+
+No `.env`: `TTS_ENGINE=kokoro`. Depois é só `akemi --voz`. `KOKORO_SPEED`
+ajusta a velocidade.
+
 Para a live, aponte `TTS_OUTPUT_DEVICE` para um cabo virtual (ex.: VB-Cable) e
 capture esse dispositivo no OBS. Enquanto ela fala, o áudio do sistema não é
 transcrito, para ela não "ouvir a si mesma".

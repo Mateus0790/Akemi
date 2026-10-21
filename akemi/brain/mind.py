@@ -250,8 +250,9 @@ class Mind:
                 elif result.status == "error":
                     self.say(f"Não consegui: {result.detail}", event)
 
-            self.history.append(Message("user", text))
-            self.history.append(Message("assistant", spoken))
+            if spoken.strip():  # o NIM recusa mensagem de assistente vazia
+                self.history.append(Message("user", text))
+                self.history.append(Message("assistant", spoken))
             self.memory.add_episode("conversa", f"{self.owner}: {text}\nAkemi: {spoken}")
             self._save_state()
 
@@ -287,8 +288,9 @@ class Mind:
             for call in calls:
                 # Vai ser negado (Trust.PUBLIC) — passamos mesmo assim para ficar no log.
                 await self.actions.request(call, event.trust)
-            self.live_history.append(Message("user", lines))
-            self.live_history.append(Message("assistant", spoken))
+            if spoken.strip():
+                self.live_history.append(Message("user", lines))
+                self.live_history.append(Message("assistant", spoken))
             self.memory.add_episode("live", f"chat: {lines}\nAkemi: {spoken}")
 
     # ====================================================== percepção ambiente

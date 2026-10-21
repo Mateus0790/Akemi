@@ -62,3 +62,21 @@ def test_build_provider_requires_nim_key():
     with pytest.raises(ProviderError):
         build_provider("nim", Settings(_env_file=None, nvidia_api_key=""))
     assert build_provider("echo", Settings(_env_file=None)).name == "echo"
+
+
+@pytest.mark.asyncio
+async def test_empty_assistant_turns_are_dropped_and_errors_explained():
+    seen = []
+
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(400, json={"error": {"message": "Empty content is not allowed"}})
+
+    p = OpenAICompatibleProvider("https://x/v1", client=client(handler))
+    msgs = [Message("system", "s"), Message("user", "oi"), Message("assistant", "  "), Message("user", "e aí")]
+    with pytest.raises(ProviderError, match="400.*Empty content"):
+        await p.complete(msgs, model="m")
+    assert [m["role"] for m in seen[0]["messages"]] == ["system", "user", "user"]
+    with pytest.raises(ProviderError, match="400.*Empty content"):
+        async for _ in p.stream(msgs, model="m"):
+            pass

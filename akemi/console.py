@@ -36,7 +36,8 @@ async def _ainput(prompt: str) -> str:
 async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool = False) -> None:
     settings = Settings()
     if voice:
-        settings.tts_engine = "piper"
+        if settings.tts_engine == "console":  # TTS_ENGINE do .env escolhe a voz
+            settings.tts_engine = "piper"
     if mic:
         settings.mic_enabled = True
     if screen:
@@ -99,7 +100,7 @@ async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool =
 def main() -> None:
     parser = argparse.ArgumentParser(description="Converse com a Akemi pelo terminal")
     parser.add_argument("--echo", action="store_true", help="usa o provider offline de teste")
-    parser.add_argument("--voz", action="store_true", help="fala em voz alta com o Piper")
+    parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão Piper)")
     parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")

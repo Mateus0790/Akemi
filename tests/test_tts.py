@@ -3,6 +3,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+import numpy as np
 import pytest
 
 from akemi.core.config import Settings
@@ -124,3 +125,85 @@ async def test_speaker_events_and_interrupt():
     assert engine.done == []  # interrompeu a 1ª e descartou a 2ª
     assert ("speech.started", None) in seen and ("speech.finished", "interrupted") in seen
     assert not sp.speaking
+
+
+# ------------------------------------------------------------------ Kokoro
+class FakeKokoro:
+    def __init__(self, delay=0.0):
+        self.delay, self.calls = delay, []
+
+    def get_voices(self):
+        return ["pf_dora", "pm_alex"]
+
+    def create(self, text, voice, speed, lang):
+        self.calls.append((text, voice, speed, lang))
+        time.sleep(self.delay)
+        return np.array([0.0, 0.5, -0.5, 2.0], dtype=np.float32), 24000
+
+
+@pytest.mark.asyncio
+async def test_kokoro_speaks_pcm16_with_dora():
+    from akemi.tts.kokoro_engine import KokoroTTS
+
+    kokoro, player = FakeKokoro(), FakePlayer()
+    tts = KokoroTTS("m.onnx", "v.bin", kokoro=kokoro, player=player, speed=1.1)
+    await tts.speak("Oi, Mateus!")
+    assert kokoro.calls == [("Oi, Mateus!", "pf_dora", 1.1, "pt-br")]
+    pcm, sr, ch = player.played[0]
+    assert (sr, ch) == (24000, 1)
+    assert np.frombuffer(pcm, dtype=np.int16).tolist() == [0, 16383, -16383, 32767]  # 2.0 é cortado
+
+
+@pytest.mark.asyncio
+async def test_kokoro_interrupted_while_synthesizing_does_not_play():
+    from akemi.tts.kokoro_engine import KokoroTTS
+
+    player = FakePlayer()
+    tts = KokoroTTS("m.onnx", "v.bin", kokoro=FakeKokoro(delay=0.3), player=player)
+    task = asyncio.create_task(tts.speak("uma frase"))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0.4)  # a thread termina a síntese e não toca nada
+    assert player.played == []
+
+
+def test_kokoro_missing_files_raise_clear_error(tmp_path):
+    from akemi.tts.kokoro_engine import KokoroTTS
+
+    with pytest.raises(FileNotFoundError, match="Kokoro"):
+        KokoroTTS(tmp_path / "x.onnx", tmp_path / "v.bin").load()
+
+
+def test_build_tts_kokoro(tmp_path):
+    from akemi.tts.kokoro_engine import KokoroTTS
+
+    s = Settings(_env_file=None, tts_engine="kokoro", kokoro_voice="pm_alex")
+    engine = build_tts(s)
+    assert isinstance(engine, KokoroTTS) and engine.voice == "pm_alex"
+
+
+def test_player_blocks_are_whole_samples(monkeypatch):
+    """22050 Hz × 50 ms = 2205 bytes: o bloco precisa ser par (int16)."""
+    import sys
+    import types
+
+    writes = []
+
+    class Stream:
+        def __init__(self, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        def write(self, data):
+            assert len(data) % 2 == 0, "bloco cortou uma amostra no meio"
+            writes.append(len(data))
+
+    monkeypatch.setitem(sys.modules, "sounddevice", types.SimpleNamespace(RawOutputStream=Stream))
+    from akemi.tts.piper_engine import SoundDevicePlayer
+
+    SoundDevicePlayer().play(b"\x00\x01" * 22050, 22050, 1, threading.Event())
+    assert sum(writes) == 44100 and writes[0] == 2204

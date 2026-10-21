@@ -17,6 +17,12 @@ from .base import LLMProvider, Message, ProviderError
 logger = structlog.get_logger()
 
 
+def _raise_for_status(resp: httpx.Response, name: str) -> None:
+    """Como ``raise_for_status``, mas com o motivo que a API mandou no corpo."""
+    if resp.status_code >= 400:
+        raise ProviderError(f"{name}: HTTP {resp.status_code}: {resp.text[:300]}")
+
+
 class OpenAICompatibleProvider(LLMProvider):
     def __init__(
         self,
@@ -48,7 +54,13 @@ class OpenAICompatibleProvider(LLMProvider):
     def _body(cls, messages, model, max_tokens, temperature, json_mode=False, stream=False):
         body = {
             "model": model,
-            "messages": [{"role": m.role, "content": cls._content(m)} for m in messages],
+            # Mensagem de assistente vazia derruba o pedido inteiro (400) em vários
+            # provedores; não acrescenta nada à conversa, então sai.
+            "messages": [
+                {"role": m.role, "content": cls._content(m)}
+                for m in messages
+                if m.role != "assistant" or m.content.strip() or m.images
+            ],
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,
@@ -73,7 +85,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 # Nem todo modelo aceita response_format; tenta de novo sem ele.
                 body.pop("response_format", None)
                 resp = await self._client.post("/chat/completions", json=body)
-            resp.raise_for_status()
+            _raise_for_status(resp, self.name)
             data = resp.json()
             return (data["choices"][0]["message"].get("content") or "").strip()
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
@@ -90,7 +102,9 @@ class OpenAICompatibleProvider(LLMProvider):
         body = self._body(messages, model, max_tokens, temperature, stream=True)
         try:
             async with self._client.stream("POST", "/chat/completions", json=body) as resp:
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    await resp.aread()
+                _raise_for_status(resp, self.name)
                 done = False
                 # Consome o stream até o fim (sem ``break``) para o httpx
                 # fechar os geradores internos corretamente.

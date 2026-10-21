@@ -26,22 +26,36 @@ logger = structlog.get_logger()
 
 
 def build_tts(settings: Settings) -> TTSEngine:
-    if settings.tts_engine == "piper":
-        from akemi.tts.piper_engine import PiperTTS, SoundDevicePlayer
+    if settings.tts_engine == "console":
+        return ConsoleTTS()
+    from akemi.tts.piper_engine import SoundDevicePlayer
 
-        device = settings.tts_output_device or None
-        if device is not None and device.isdigit():
-            device = int(device)
-        try:
-            return PiperTTS(
-                settings.piper_model_path,
-                speaker_id=settings.piper_speaker_id,
-                length_scale=settings.piper_length_scale,
-                volume=settings.piper_volume,
-                player=SoundDevicePlayer(device) if device is not None else None,
+    device = settings.tts_output_device or None
+    if device is not None and device.isdigit():
+        device = int(device)
+    try:
+        player = SoundDevicePlayer(device) if device is not None else None
+        if settings.tts_engine == "kokoro":
+            from akemi.tts.kokoro_engine import KokoroTTS
+
+            return KokoroTTS(
+                settings.kokoro_model_path,
+                settings.kokoro_voices_path,
+                voice=settings.kokoro_voice,
+                speed=settings.kokoro_speed,
+                player=player,
             )
-        except RuntimeError as exc:
-            logger.error("piper unavailable, falling back to console", error=str(exc))
+        from akemi.tts.piper_engine import PiperTTS
+
+        return PiperTTS(
+            settings.piper_model_path,
+            speaker_id=settings.piper_speaker_id,
+            length_scale=settings.piper_length_scale,
+            volume=settings.piper_volume,
+            player=player,
+        )
+    except RuntimeError as exc:
+        logger.error("tts unavailable, falling back to console", engine=settings.tts_engine, error=str(exc))
     return ConsoleTTS()
 
 
