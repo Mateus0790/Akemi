@@ -75,16 +75,27 @@ class Speaker:
     async def run(self) -> None:
         while True:
             text = await self._queue.get()
+            # speech.started/finished servem para o avatar (boca, expressão)
+            # e para a Akemi não "ouvir a si mesma" no áudio do sistema.
+            self.bus.publish(Event("speech.started", {"text": text}, source="speaker"))
             self._current = asyncio.create_task(self.engine.speak(text))
+            status = "done"
             try:
                 await self._current
                 self.spoken.append(text)
             except asyncio.CancelledError:
                 if self._task is not None and self._task.cancelling():
                     raise
+                status = "interrupted"
                 logger.info("speech interrupted")
             except Exception:
+                status = "error"
                 logger.exception("tts failed")
+            self.bus.publish(Event("speech.finished", {"text": text, "status": status}, source="speaker"))
+
+    @property
+    def speaking(self) -> bool:
+        return self._current is not None and not self._current.done()
 
     def start(self) -> asyncio.Task:
         if self._task is None or self._task.done():

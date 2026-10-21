@@ -25,6 +25,26 @@ from akemi.tts.base import ConsoleTTS, Speaker, TTSEngine
 logger = structlog.get_logger()
 
 
+def build_tts(settings: Settings) -> TTSEngine:
+    if settings.tts_engine == "piper":
+        from akemi.tts.piper_engine import PiperTTS, SoundDevicePlayer
+
+        device = settings.tts_output_device or None
+        if device is not None and device.isdigit():
+            device = int(device)
+        try:
+            return PiperTTS(
+                settings.piper_model_path,
+                speaker_id=settings.piper_speaker_id,
+                length_scale=settings.piper_length_scale,
+                volume=settings.piper_volume,
+                player=SoundDevicePlayer(device) if device is not None else None,
+            )
+        except RuntimeError as exc:
+            logger.error("piper unavailable, falling back to console", error=str(exc))
+    return ConsoleTTS()
+
+
 class Akemi:
     def __init__(
         self,
@@ -70,7 +90,7 @@ class Akemi:
             min_unprompted_gap_s=settings.min_seconds_between_unprompted_speech,
             state_path=self.state_path,
         )
-        self.speaker = Speaker(self.bus, tts or ConsoleTTS(), self.moderator)
+        self.speaker = Speaker(self.bus, tts or build_tts(settings), self.moderator)
         self.chat = ChatBatcher(
             self.bus,
             self.moderator,
@@ -102,6 +122,13 @@ class Akemi:
     async def start(self) -> None:
         self.mind.register()
         self.speaker.register()
+        warmup = getattr(self.speaker.engine, "warmup", None)
+        if warmup is not None:
+            try:
+                await warmup()
+            except Exception as exc:
+                logger.error("tts failed to load, falling back to console", error=str(exc))
+                self.speaker.engine = ConsoleTTS()
         self._tasks += [self.bus.start(), self.speaker.start()]
         self._tasks.append(asyncio.create_task(self.chat.run(), name="chat-batcher"))
         if self.settings.idle_think_interval_s > 0:
@@ -138,7 +165,8 @@ class Akemi:
         stt = WhisperTranscriber(self.settings.whisper_model, self.settings.stt_language)
 
         def on_frame(frame: bytes) -> None:  # thread do PortAudio
-            if not self.pause.paused:
+            # Ignora o áudio enquanto ela mesma fala (senão ela se ouve no loopback).
+            if not self.pause.paused and not self.speaker.speaking:
                 loop.call_soon_threadsafe(lambda: frames.full() or frames.put_nowait(frame))
 
         async def pipeline() -> None:
