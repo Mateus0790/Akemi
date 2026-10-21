@@ -73,7 +73,11 @@ def test_triggers_yaml_loads_and_cooldown():
     rule = ts.match("ambient.screen", "Traceback (most recent call last)", now=1000)
     assert rule is not None and rule.id == "erro_na_tela"
     TriggerSet.fire(rule, now=1000)
-    assert ts.match("ambient.screen", "Traceback", now=1010) is None
+    # Em cooldown, o erro cai na regra genérica da tela, que tem o próprio cooldown.
+    generic = ts.match("ambient.screen", "Traceback", now=1010)
+    assert generic is not None and generic.id == "mudou_a_tela"
+    TriggerSet.fire(generic, now=1010)
+    assert ts.match("ambient.screen", "Traceback", now=1020) is None
 
 
 def test_persona_loads_with_owner():

@@ -36,6 +36,7 @@ VTuber de IA.
 | `safety/moderation.py` | Filtro de entrada (chat) e de saída (tudo que vira voz). |
 | `storage/memory.py` | Memória episódica (SQLite FTS5) + fatos. |
 | `stt/` | Segmentação de fala pelo VAD + Whisper. |
+| `vision/` | Tela: detecção de mudança, OCR e descrição por modelo de visão → `ambient.screen`. |
 | `tts/base.py` | `Speaker`: único caminho para falar; interrompe quando o dono começa a falar. |
 
 ## Dois modelos
@@ -98,7 +99,10 @@ async def tocar_musica(nome: str) -> str:
 2. ~~Microfone do dono~~ — `stt/listener.py`: VAD → Whisper → filtros
    (alucinação, eco, palavra de ativação) → `owner.message`. Voz alta durante a
    fala dela gera `owner.speech_started`, que interrompe o `Speaker`.
-3. Visão: diferença de quadros + OCR → `ambient.screen`.
+3. ~~Visão~~ — `vision/watcher.py`: print periódico → miniatura e diferença de
+   quadros (`frame_diff.py`) → OCR do Tesseract quando a tela muda e assenta, ou
+   quando a janela em foco muda → modelo de visão opcional (`describe.py`) →
+   `ambient.screen` (Trust.PUBLIC). Janelas sensíveis (senha, banco) são puladas.
 4. Hermes: mover chat, timers e memória para o servidor (24/7) e conversar com
    a Akemi pelo barramento via LAN.
 5. Busca semântica (embeddings) na memória.

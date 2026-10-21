@@ -103,6 +103,9 @@ class Akemi:
         self._mic = None
         self._stt = None
         self.voice_input = None
+        self.screen = None
+        self._screen_grabber = None
+        self._vision_provider: LLMProvider | None = None
 
     # ----------------------------------------------------------- entradas
     def owner_say(self, text: str, source: str = "console") -> None:
@@ -151,6 +154,11 @@ class Akemi:
                 self._start_mic()
             except Exception as exc:
                 logger.error("mic unavailable", error=str(exc))
+        if self.settings.screen_enabled:
+            try:
+                self._start_screen()
+            except Exception as exc:
+                logger.error("screen vision unavailable", error=str(exc))
         logger.info(
             "akemi started",
             fast=self.models.fast_model,
@@ -235,6 +243,34 @@ class Akemi:
         self._mic = MicCapture(device)
         self._mic.start(self._frame_bridge("mic", self.voice_input.feed))
 
+    # ------------------------------------------------------------- visão
+    def _start_screen(self) -> None:
+        from akemi.vision.ocr import TesseractOCR
+        from akemi.vision.screenshot import ScreenGrabber, active_window_title
+        from akemi.vision.watcher import ScreenWatcher
+
+        s = self.settings
+        ocr = TesseractOCR(s.ocr_lang, s.tesseract_cmd or None)
+        describe = None
+        if s.vision_model:
+            from akemi.vision.describe import ScreenDescriber
+
+            provider_name = s.vision_provider or s.brain_provider
+            if provider_name != s.brain_provider:
+                self._vision_provider = build_provider(provider_name, s)
+            describe = ScreenDescriber(self._vision_provider or self.models.fast, s.vision_model).describe
+        self._screen_grabber = ScreenGrabber(s.screen_monitor)
+        self.screen = ScreenWatcher(
+            self.bus, self._screen_grabber.grab, ocr.read, self.pause,
+            window_title=active_window_title,
+            describe=describe,
+            interval_s=s.screen_interval_s,
+            describe_interval_s=s.vision_describe_interval_s,
+            change_threshold=s.screen_change_threshold,
+            ignored_windows=s.screen_ignore_windows or None,
+        )
+        self._tasks.append(asyncio.create_task(self.screen.run(), name="screen"))
+
     async def stop(self) -> None:
         if self._audio_capture is not None:
             self._audio_capture.stop()
@@ -243,8 +279,11 @@ class Akemi:
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self._screen_grabber is not None:
+            self._screen_grabber.close()
         if self.state_path:
             self.state.save(self.state_path)
-        for p in {id(self.models.fast): self.models.fast, id(self.models.deep): self.models.deep}.values():
+        providers = [self.models.fast, self.models.deep, self._vision_provider]
+        for p in {id(p): p for p in providers if p is not None}.values():
             await p.aclose()
         self.memory.close()

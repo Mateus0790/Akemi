@@ -9,6 +9,15 @@ from .base import LLMProvider, Message, ProviderError
 API_VERSION = "2023-06-01"
 
 
+def _content(m: Message):
+    if not m.images:
+        return m.content
+    return [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}}
+        for img in m.images
+    ] + [{"type": "text", "text": m.content}]
+
+
 class AnthropicProvider(LLMProvider):
     name = "anthropic"
 
@@ -43,7 +52,7 @@ class AnthropicProvider(LLMProvider):
         if json_mode:
             system += "\n\nResponda somente com um objeto JSON válido."
         convo = [
-            {"role": m.role, "content": m.content}
+            {"role": m.role, "content": _content(m)}
             for m in messages
             if m.role != "system"
         ] or [{"role": "user", "content": "..."}]

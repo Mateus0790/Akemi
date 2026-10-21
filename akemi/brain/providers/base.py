@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import AsyncIterator, Literal
 
 Role = Literal["system", "user", "assistant"]
@@ -13,6 +13,7 @@ Role = Literal["system", "user", "assistant"]
 class Message:
     role: Role
     content: str
+    images: list[str] = field(default_factory=list)  # JPEG em base64 (modelos de visão)
 
 
 class ProviderError(RuntimeError):

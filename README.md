@@ -33,10 +33,10 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Captura de áudio do sistema (WASAPI loopback) → VAD → segmentação → Whisper
 - **Voz local com Piper** (pt-BR, offline), interrompível, com escolha da saída de áudio
 - **Microfone**: fale "Akemi, ..." e ela responde; interrompa falando por cima dela
+- **Visão**: ela lê a tela (OCR) quando algo muda e, com um modelo de visão, entende jogos e vídeos
 - Modo console para conversar sem áudio
 
-**Ainda falta:** visão/OCR, integração com o Hermes, avatar
-e self-improve.
+**Ainda falta:** integração com o Hermes, avatar e self-improve.
 
 ## Instalação
 
@@ -64,6 +64,7 @@ Comandos no console:
 |---|---|
 | `qualquer texto` | fala com ela como dono |
 | `/chat <nick> <msg>` | simula uma mensagem do chat da live |
+| `/olhar` | faz ela olhar a tela agora (com `--tela`) |
 | `/tela <texto>` | simula algo visto na tela |
 | `/audio <texto>` | simula algo ouvido no PC |
 | `/pensar` | força um momento de pensamento |
@@ -102,6 +103,35 @@ O que você fala com outras pessoas, sem o nome dela, é descartado na hora e n�
 vai para a memória. Ela também ignora a própria voz vazando da caixa de som e
 as frases que o Whisper inventa no silêncio ("obrigado por assistir"). Mesmo
 assim, **com fone de ouvido funciona bem melhor**.
+
+## Visão
+
+```powershell
+pip install -e ".[vision]"
+akemi --tela
+```
+
+O OCR usa o **Tesseract**, que é instalado à parte: baixe o instalador do
+UB Mannheim (github.com/UB-Mannheim/tesseract/wiki) e marque o idioma
+**Portuguese**. A pasta padrão é encontrada sozinha; se instalar em outro
+lugar, defina `TESSERACT_CMD`.
+
+A cada `SCREEN_INTERVAL_S` ela tira um print, mas só lê quando a tela muda de
+verdade e para de mudar, ou quando você troca de janela. Num vídeo em tela
+cheia ela não fica lendo sem parar. O que ela vê entra no contexto dela, e
+erros ou um "game over" podem gerar um comentário espontâneo
+(`akemi/brain/triggers.yaml`). No console, `/olhar` mostra o que ela está vendo.
+
+O OCR só lê texto. Para ela entender jogos, vídeos e imagens, configure um
+modelo de visão em `VISION_MODEL` (ex.: `meta/llama-3.2-11b-vision-instruct`
+no NIM, ou `qwen2.5vl` no Ollama). Ele é chamado no máximo a cada
+`VISION_DESCRIBE_INTERVAL_S`.
+
+**Privacidade:** ela não lê janelas cujo título tenha "senha", "password",
+gerenciadores de senha, "banco" ou aba anônima (`SCREEN_IGNORE_WINDOWS`
+substitui essa lista). Prints não são salvos em disco. O texto lido vai para o
+provider do LLM, então com provider na nuvem ele sai do PC. `/pausar`
+desliga a visão na hora.
 
 Para ligar o chat da Twitch, preencha `TWITCH_CHANNEL` no `.env`. Para ouvir o
 áudio do PC: `pip install -e ".[audio,stt]"` e `SYSTEM_AUDIO_ENABLED=true`.
