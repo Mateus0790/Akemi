@@ -27,6 +27,8 @@ from typing import Any
 
 import structlog
 
+from akemi.actions.desktop import PC_ACTIONS, register_desktop_actions
+from akemi.actions.registry import ActionCall, ActionRegistry
 from akemi.core.config import Settings
 from akemi.core.events import Event, EventBus
 from akemi.core.pause import PauseSwitch
@@ -121,10 +123,24 @@ class TokenRejected(RuntimeError):
 
 
 class Body:
-    def __init__(self, settings: Settings, url: str, token: str, engine: TTSEngine) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        url: str,
+        token: str,
+        engine: TTSEngine,
+        *,
+        actions: ActionRegistry | None = None,
+    ) -> None:
         self.settings = settings
         self.url = url
         self.token = token
+        # Ações do PC que o núcleo pode pedir (só as de PC_ACTIONS são aceitas).
+        if actions is None:
+            actions = ActionRegistry()
+            register_desktop_actions(actions)
+        self.actions = actions
+        self._action_tasks: set[asyncio.Task] = set()
         self.bus = EventBus()
         self.pause = PauseSwitch()
         self.voice = BodyVoice(engine, self._on_spoken)
@@ -180,6 +196,12 @@ class Body:
             await self.voice.stop_all()
         elif kind == "exchange":
             self.senses.mark_exchange()
+        elif kind == "action":
+            # Em task própria: abrir programa pode levar ~1 s e o loop de
+            # mensagens (fala, interrupção) não pode esperar.
+            task = asyncio.create_task(self._run_action(msg))
+            self._action_tasks.add(task)
+            task.add_done_callback(self._action_tasks.discard)
         elif kind in ("welcome", "paused"):
             if msg.get("paused"):
                 self.pause.pause("núcleo")
@@ -187,6 +209,19 @@ class Body:
                 self.pause.resume()
         else:
             logger.warning("unknown message from core", type=kind)
+
+    async def _run_action(self, msg: dict) -> None:
+        aid, name, args = msg.get("id"), str(msg.get("name", "")), msg.get("args")
+        if name not in PC_ACTIONS or not isinstance(args, dict):
+            # O núcleo só pede ações do PC. Qualquer outra coisa é recusada aqui,
+            # mesmo vinda de um núcleo autenticado.
+            logger.warning("action refused by body", action=name)
+            await self.send("action_result", id=aid, status="denied", detail="ação não permitida no PC")
+            return
+        result = await self.actions.execute_authorized(ActionCall(name, args))
+        logger.info("action executed for core", action=name, status=result.status)
+        value = result.value if isinstance(result.value, (str, int, float, bool)) or result.value is None else str(result.value)
+        await self.send("action_result", id=aid, status=result.status, detail=result.detail, value=value)
 
     async def session(self, conn: Any) -> None:
         """Uma conexão: autentica e processa mensagens até cair."""
@@ -243,7 +278,7 @@ class Body:
     async def stop(self) -> None:
         await self.senses.stop()
         await self.voice.stop()
-        for t in self._tasks:
+        for t in [*self._tasks, *self._action_tasks]:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         if self.conn is not None:

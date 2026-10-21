@@ -176,6 +176,17 @@ class ActionRegistry:
         action = self._actions[pending.call.name]
         return await self._run(action, pending.call)
 
+    async def execute_authorized(self, call: ActionCall) -> ActionResult:
+        """Executa sem checar confiança nem pedir confirmação.
+
+        Só para o corpo: o núcleo já checou que o pedido veio do dono e já
+        pegou o "sim". Quem chama precisa restringir *quais* ações aceita.
+        """
+        action = self._actions.get(call.name)
+        if action is None:
+            return ActionResult(call.name, "unknown", "ação inexistente")
+        return await self._run(action, call)
+
     async def _run(self, action: Action, call: ActionCall) -> ActionResult:
         try:
             sig = inspect.signature(action.fn)

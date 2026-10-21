@@ -220,3 +220,104 @@ def test_protocol_validation():
 
 def test_server_class_is_exported():
     assert AkemiServer.health
+
+
+# ---------------------------------------------------- ações do PC no corpo
+from akemi.actions.desktop import StartApp, StartMenu, Window, register_desktop_actions  # noqa: E402
+from akemi.actions.registry import ActionRegistry  # noqa: E402
+
+
+class FakePC:
+    def __init__(self):
+        self.launched, self.closed = [], []
+        self.windows = [Window(7, "Spotify Premium", "Spotify")]
+        self.actions = ActionRegistry()
+        menu = StartMenu(loader=lambda: [StartApp("Discord", "com.squirrel.Discord.Discord")],
+                         launcher=self.launched.append)
+        register_desktop_actions(self.actions, start_menu=menu, press=lambda vk, n: None,
+                                 windows=lambda: self.windows, close=self.closed.append, open_url=lambda u: None)
+
+
+def pc_responder(msgs, json_mode):
+    if json_mode:
+        return '{"decision": "ignore"}'
+    last = msgs[-1].content.lower()
+    if "abre" in last:
+        return '[[acao:abrir_programa {"nome": "discord"}]]'
+    if "fecha" in last:
+        return '[[acao:fechar_programa {"nome": "Spotify"}]]'
+    return "Oi!"
+
+
+@pytest_asyncio.fixture
+async def pc_core(tmp_path):
+    settings = Settings(
+        _env_file=None, brain_provider="echo", data_dir=tmp_path, idle_think_interval_s=0,
+        chat_batch_window_s=999, min_seconds_between_unprompted_speech=0, akemi_token=TOKEN,
+    )
+    llm = EchoProvider(pc_responder)
+    server = build(settings, fast=llm, deep=llm, persist=False)
+    await server.akemi.start()
+    ws = await server.serve("127.0.0.1", 0)
+    server.url = f"ws://127.0.0.1:{next(iter(ws.sockets)).getsockname()[1]}"
+    yield server
+    ws.close()
+    await ws.wait_closed()
+    await server.akemi.stop()
+
+
+@pytest_asyncio.fixture
+async def pc_body(pc_core):
+    pc, tts = FakePC(), RecordingTTS()
+    body = Body(Settings(_env_file=None, akemi_token=TOKEN), pc_core.url, TOKEN, tts, actions=pc.actions)
+    await body.start()
+    link = asyncio.create_task(body.connect_forever())
+    await asyncio.wait_for(body.connected.wait(), 3)
+    yield body, pc, tts
+    link.cancel()
+    await asyncio.gather(link, return_exceptions=True)
+    await body.stop()
+
+
+@pytest.mark.asyncio
+async def test_pc_action_runs_on_the_body(pc_core, pc_body):
+    body, pc, tts = pc_body
+    assert pc_core.akemi.actions.get("abrir_programa") is not None
+    await body.owner_say("abre o discord")
+    await until(lambda: tts.said == ["Abrindo o Discord."])
+    assert [a.name for a in pc.launched] == ["Discord"]
+
+
+@pytest.mark.asyncio
+async def test_close_program_confirms_through_the_body(pc_core, pc_body):
+    body, pc, tts = pc_body
+    await body.owner_say("fecha o spotify")
+    await until(lambda: tts.said == ["Fecho o Spotify? Diz sim ou não."])
+    assert pc.closed == []
+    await body.owner_say("sim")
+    await until(lambda: len(tts.said) == 2)
+    assert [w.hwnd for w in pc.closed] == [7] and tts.said[-1] == "Feito."
+
+
+@pytest.mark.asyncio
+async def test_pc_action_without_body(pc_core):
+    pc_core.akemi.owner_say("abre o discord")
+    await until(lambda: any("PC não está conectado" in s for s in pc_core.akemi.speaker.spoken))
+
+
+@pytest.mark.asyncio
+async def test_body_refuses_actions_outside_the_pc_list():
+    pc = FakePC()
+    pc.actions.register("apagar_tudo", "x")(lambda: pc.launched.append("BOOM"))
+    body = Body(Settings(_env_file=None, akemi_token=TOKEN), "ws://x", TOKEN, RecordingTTS(), actions=pc.actions)
+    sent = []
+
+    async def fake_send(type_, **fields):
+        sent.append((type_, fields))
+        return True
+
+    body.send = fake_send
+    await body._run_action({"id": 1, "name": "apagar_tudo", "args": {}})
+    await body._run_action({"id": 2, "name": "abrir_programa", "args": "nao-e-dict"})
+    assert pc.launched == []
+    assert [(t, f["status"]) for t, f in sent] == [("action_result", "denied"), ("action_result", "denied")]

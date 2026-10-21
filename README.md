@@ -227,8 +227,12 @@ Peça por voz ou pelo terminal:
 Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
 live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as
 "livres". Lembretes ficam na memória do processo: reiniciar a Akemi apaga os
-pendentes. As ações do PC só existem no Windows e no modo local (`akemi`);
-no modo servidor + corpo elas ainda não chegam ao PC.
+pendentes. As ações do PC funcionam no Windows.
+
+No modo servidor + corpo, o núcleo decide (confere que foi você e pede o "sim")
+e o corpo executa no PC. O corpo só aceita as ações da lista acima, então nem
+um núcleo comprometido consegue mandar ele rodar outra coisa. Com o PC
+desligado, ela responde que o PC não está conectado.
 
 ## Segurança: o chat nunca manda nela
 
