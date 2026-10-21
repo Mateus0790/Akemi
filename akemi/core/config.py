@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     # --- Percepção ---
     vad_aggressiveness: int = Field(default=2, ge=0, le=3)
     system_audio_enabled: bool = False  # ouvir o áudio do PC (WASAPI loopback) e transcrever
+    mic_enabled: bool = False  # ouvir você pelo microfone
+    mic_device: str | None = None  # nome/índice; vazio = padrão do sistema
+    # wake_word: só responde se ouvir o nome dela (ou logo depois de uma conversa)
+    # always: tudo que você falar é para ela
+    mic_mode: Literal["wake_word", "always"] = "wake_word"
+    wake_words: list[str] = ["akemi"]
+    followup_window_s: float = 20.0  # tempo para continuar a conversa sem dizer o nome
+    barge_in_rms: float = 1500.0  # volume mínimo para interromper enquanto ela fala
     whisper_model: str = "small"
     stt_language: str = "pt"
 

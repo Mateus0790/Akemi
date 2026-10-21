@@ -32,9 +32,10 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Gatilhos para comentários espontâneos (`akemi/brain/triggers.yaml`)
 - Captura de áudio do sistema (WASAPI loopback) → VAD → segmentação → Whisper
 - **Voz local com Piper** (pt-BR, offline), interrompível, com escolha da saída de áudio
+- **Microfone**: fale "Akemi, ..." e ela responde; interrompa falando por cima dela
 - Modo console para conversar sem áudio
 
-**Ainda falta:** microfone do dono, visão/OCR, integração com o Hermes, avatar
+**Ainda falta:** visão/OCR, integração com o Hermes, avatar
 e self-improve.
 
 ## Instalação
@@ -84,6 +85,23 @@ vozes pt-BR: `pt_BR-cadu-medium`, `pt_BR-jeff-medium`, `pt_BR-edresson-low`
 Para a live, aponte `TTS_OUTPUT_DEVICE` para um cabo virtual (ex.: VB-Cable) e
 capture esse dispositivo no OBS. Enquanto ela fala, o áudio do sistema não é
 transcrito, para ela não "ouvir a si mesma".
+
+## Microfone
+
+```powershell
+pip install -e ".[mic,tts]"
+akemi --listar-mics          # se o padrão do Windows não for o mic certo
+akemi --voz --mic
+```
+
+Diga **"Akemi, ..."** e ela responde. Nos 20 segundos seguintes dá para
+continuar a conversa sem repetir o nome. Falar mais alto por cima dela a
+interrompe. Para ela ouvir tudo sem precisar do nome, use `MIC_MODE=always`.
+
+O que você fala com outras pessoas, sem o nome dela, é descartado na hora e não
+vai para a memória. Ela também ignora a própria voz vazando da caixa de som e
+as frases que o Whisper inventa no silêncio ("obrigado por assistir"). Mesmo
+assim, **com fone de ouvido funciona bem melhor**.
 
 Para ligar o chat da Twitch, preencha `TWITCH_CHANNEL` no `.env`. Para ouvir o
 áudio do PC: `pip install -e ".[audio,stt]"` e `SYSTEM_AUDIO_ENABLED=true`.

@@ -3,6 +3,7 @@
     python -m akemi.console            # usa o provider do .env
     python -m akemi.console --echo     # sem API key (respostas de teste)
     python -m akemi.console --voz      # fala em voz alta (Piper)
+    python -m akemi.console --mic      # ouve você pelo microfone (diga "Akemi, ...")
 
 Comandos:
     /chat <nick> <mensagem>   simula uma mensagem do chat da live
@@ -30,10 +31,12 @@ async def _ainput(prompt: str) -> str:
     return await asyncio.to_thread(input, prompt)
 
 
-async def run(echo: bool, voice: bool = False) -> None:
+async def run(echo: bool, voice: bool = False, mic: bool = False) -> None:
     settings = Settings()
     if voice:
         settings.tts_engine = "piper"
+    if mic:
+        settings.mic_enabled = True
     if echo:
         settings.brain_provider = "echo"
         settings.deep_provider = None
@@ -87,14 +90,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Converse com a Akemi pelo terminal")
     parser.add_argument("--echo", action="store_true", help="usa o provider offline de teste")
     parser.add_argument("--voz", action="store_true", help="fala em voz alta com o Piper")
+    parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
+    parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")
     args = parser.parse_args()
+    if args.listar_mics:
+        from akemi.audio.mic import MicCapture
+
+        print("\n".join(MicCapture.list_devices()))
+        return
     if sys.platform == "win32":
         try:
             sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
         except Exception:
             pass
     try:
-        asyncio.run(run(args.echo, args.voz))
+        asyncio.run(run(args.echo, args.voz, args.mic))
     except KeyboardInterrupt:
         pass
 

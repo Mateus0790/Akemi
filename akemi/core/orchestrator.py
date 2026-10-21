@@ -100,6 +100,9 @@ class Akemi:
         )
         self._tasks: list[asyncio.Task] = []
         self._audio_capture = None
+        self._mic = None
+        self._stt = None
+        self.voice_input = None
 
     # ----------------------------------------------------------- entradas
     def owner_say(self, text: str, source: str = "console") -> None:
@@ -143,6 +146,11 @@ class Akemi:
             self._tasks.append(asyncio.create_task(twitch.run(), name="twitch"))
         if self.settings.system_audio_enabled:
             self._start_system_audio()
+        if self.settings.mic_enabled:
+            try:
+                self._start_mic()
+            except Exception as exc:
+                logger.error("mic unavailable", error=str(exc))
         logger.info(
             "akemi started",
             fast=self.models.fast_model,
@@ -150,40 +158,88 @@ class Akemi:
             provider=self.settings.brain_provider,
         )
 
+    # ------------------------------------------------------------ áudio
+    def _transcriber(self):
+        if self._stt is None:
+            from akemi.stt.transcriber import WhisperTranscriber
+
+            self._stt = WhisperTranscriber(self.settings.whisper_model, self.settings.stt_language)
+        return self._stt
+
+    def _frame_bridge(self, name: str, handler) -> callable:
+        """Liga a thread do PortAudio ao loop asyncio: devolve o callback de frame
+        e cria a task que entrega cada frame a ``handler``."""
+        loop = asyncio.get_running_loop()
+        frames: asyncio.Queue[bytes] = asyncio.Queue(maxsize=500)
+
+        def put(frame: bytes) -> None:
+            if not frames.full():
+                frames.put_nowait(frame)
+
+        def on_frame(frame: bytes) -> None:  # thread do PortAudio
+            loop.call_soon_threadsafe(put, frame)
+
+        async def pump() -> None:
+            while True:
+                try:
+                    await handler(await frames.get())
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("audio pipeline failed", pipeline=name)
+
+        self._tasks.append(asyncio.create_task(pump(), name=name))
+        return on_frame
+
     def _start_system_audio(self) -> None:
         if sys.platform != "win32":
             logger.warning("system audio capture only works on Windows; skipping")
             return
         from akemi.audio.capture import AudioCapture
         from akemi.audio.vad import VAD
-        from akemi.stt.transcriber import SpeechSegmenter, WhisperTranscriber
+        from akemi.stt.listener import AmbientAudioInput
 
-        loop = asyncio.get_running_loop()
-        frames: asyncio.Queue[bytes] = asyncio.Queue(maxsize=500)
-        vad = VAD(self.settings.vad_aggressiveness)
-        segmenter = SpeechSegmenter(vad.is_speech)
-        stt = WhisperTranscriber(self.settings.whisper_model, self.settings.stt_language)
-
-        def on_frame(frame: bytes) -> None:  # thread do PortAudio
-            # Ignora o áudio enquanto ela mesma fala (senão ela se ouve no loopback).
-            if not self.pause.paused and not self.speaker.speaking:
-                loop.call_soon_threadsafe(lambda: frames.full() or frames.put_nowait(frame))
-
-        async def pipeline() -> None:
-            while True:
-                seg = segmenter.push(await frames.get())
-                if seg:
-                    text = await stt.transcribe(seg)
-                    if len(text) > 3:
-                        self.observe("audio", text)
-
+        stt = self._transcriber()
+        ambient = AmbientAudioInput(
+            self.bus, stt.transcribe, VAD(self.settings.vad_aggressiveness).is_speech,
+            self.speaker, self.pause,
+        )
         self._audio_capture = AudioCapture()
-        self._audio_capture.start(callback=on_frame)
-        self._tasks.append(asyncio.create_task(pipeline(), name="system-audio"))
+        self._audio_capture.start(callback=self._frame_bridge("system-audio", ambient.feed))
+
+    def _start_mic(self) -> None:
+        from akemi.audio.mic import MicCapture
+        from akemi.audio.vad import VAD
+        from akemi.stt.listener import OwnerVoiceInput
+
+        stt = self._transcriber()
+        device = self.settings.mic_device or None
+        if device is not None and device.isdigit():
+            device = int(device)
+        self.voice_input = OwnerVoiceInput(
+            self.bus, stt.transcribe, VAD(self.settings.vad_aggressiveness).is_speech,
+            self.speaker, self.pause,
+            mode=self.settings.mic_mode,
+            wake_words=self.settings.wake_words,
+            followup_window_s=self.settings.followup_window_s,
+            barge_in_rms=self.settings.barge_in_rms,
+        )
+
+        def on_speech_finished(event: Event) -> None:
+            # Depois que ela responde a você (ou fala por conta própria), dá
+            # para continuar a conversa sem repetir o nome dela.
+            if event.payload.get("origin_trust", 0) >= Trust.SYSTEM:
+                self.voice_input.mark_exchange()
+
+        self.bus.subscribe("speech.finished", on_speech_finished)
+        self._mic = MicCapture(device)
+        self._mic.start(self._frame_bridge("mic", self.voice_input.feed))
 
     async def stop(self) -> None:
         if self._audio_capture is not None:
             self._audio_capture.stop()
+        if self._mic is not None:
+            self._mic.stop()
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
