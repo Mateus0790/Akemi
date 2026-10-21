@@ -95,8 +95,9 @@ async def tocar_musica(nome: str) -> str:
 
 1. ~~TTS de verdade~~ — Piper (`tts/piper_engine.py`). O `Speaker` publica
    `speech.started` / `speech.finished`, que o avatar pode usar para a boca.
-2. Microfone do dono → `owner.message` (hoje o áudio capturado é o *loopback*,
-   ou seja, o que sai das caixas de som — por isso entra como `ambient.audio`).
+2. ~~Microfone do dono~~ — `stt/listener.py`: VAD → Whisper → filtros
+   (alucinação, eco, palavra de ativação) → `owner.message`. Voz alta durante a
+   fala dela gera `owner.speech_started`, que interrompe o `Speaker`.
 3. Visão: diferença de quadros + OCR → `ambient.screen`.
 4. Hermes: mover chat, timers e memória para o servidor (24/7) e conversar com
    a Akemi pelo barramento via LAN.

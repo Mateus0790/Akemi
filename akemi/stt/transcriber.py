@@ -66,20 +66,37 @@ class SpeechSegmenter:
 
 
 class WhisperTranscriber:
-    def __init__(self, model_size: str = "small", language: str = "pt", device: str = "auto") -> None:
+    def __init__(
+        self,
+        model_size: str = "small",
+        language: str = "pt",
+        device: str = "auto",
+        initial_prompt: str | None = "Akemi",
+    ) -> None:
         try:
             from faster_whisper import WhisperModel
         except ImportError as exc:  # pragma: no cover - depende do extra
             raise RuntimeError('Instale o extra de STT: pip install -e ".[stt]"') from exc
         compute = "int8"
         self.language = language
+        # Dica de vocabulário: ajuda o Whisper a escrever "Akemi" certo.
+        self.initial_prompt = initial_prompt
+        self._lock = asyncio.Lock()  # mic e áudio do sistema dividem o mesmo modelo
         self._model = WhisperModel(model_size, device=device, compute_type=compute)
         logger.info("whisper loaded", model=model_size)
 
     def _transcribe_sync(self, pcm16: bytes) -> str:
         audio = np.frombuffer(pcm16, dtype=np.int16).astype(np.float32) / 32768.0
-        segments, _ = self._model.transcribe(audio, language=self.language, vad_filter=False, beam_size=1)
+        segments, _ = self._model.transcribe(
+            audio,
+            language=self.language,
+            vad_filter=False,
+            beam_size=1,
+            initial_prompt=self.initial_prompt,
+            condition_on_previous_text=False,
+        )
         return " ".join(s.text.strip() for s in segments).strip()
 
     async def transcribe(self, pcm16: bytes) -> str:
-        return await asyncio.to_thread(self._transcribe_sync, pcm16)
+        async with self._lock:
+            return await asyncio.to_thread(self._transcribe_sync, pcm16)

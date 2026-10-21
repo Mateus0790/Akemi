@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import time
+from collections import deque
 from typing import Callable
 
 import structlog
 
-from akemi.core.events import Event, EventBus
+from akemi.core.events import Event, EventBus, Trust
 from akemi.safety.moderation import Moderator
 
 logger = structlog.get_logger()
@@ -45,7 +47,8 @@ class Speaker:
         self.bus = bus
         self.engine = engine
         self.moderator = moderator
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[str, Trust]] = asyncio.Queue()
+        self._recent: deque[tuple[float, str]] = deque(maxlen=10)
         self._current: asyncio.Task | None = None
         self._task: asyncio.Task | None = None
         self.spoken: list[str] = []
@@ -62,7 +65,7 @@ class Speaker:
             return
         if verdict.reasons:
             logger.info("speech sanitized", reasons=verdict.reasons)
-        await self._queue.put(verdict.text)
+        await self._queue.put((verdict.text, event.trust))
 
     async def on_stop(self, event: Event | None = None) -> None:
         """Interrompe a fala atual e descarta a fila (o dono começou a falar)."""
@@ -74,10 +77,11 @@ class Speaker:
 
     async def run(self) -> None:
         while True:
-            text = await self._queue.get()
+            text, trust = await self._queue.get()
             # speech.started/finished servem para o avatar (boca, expressão)
-            # e para a Akemi não "ouvir a si mesma" no áudio do sistema.
-            self.bus.publish(Event("speech.started", {"text": text}, source="speaker"))
+            # e para a Akemi não "ouvir a si mesma" no áudio do sistema/mic.
+            self._recent.append((time.time(), text))
+            self.bus.publish(Event("speech.started", {"text": text, "origin_trust": int(trust)}, source="speaker"))
             self._current = asyncio.create_task(self.engine.speak(text))
             status = "done"
             try:
@@ -91,7 +95,18 @@ class Speaker:
             except Exception:
                 status = "error"
                 logger.exception("tts failed")
-            self.bus.publish(Event("speech.finished", {"text": text, "status": status}, source="speaker"))
+            self._recent.append((time.time(), text))  # marca o fim (janela de eco)
+            self.bus.publish(
+                Event(
+                    "speech.finished",
+                    {"text": text, "status": status, "origin_trust": int(trust)},
+                    source="speaker",
+                )
+            )
+
+    @property
+    def recent_speech(self) -> list[tuple[float, str]]:
+        return list(self._recent)
 
     @property
     def speaking(self) -> bool:
