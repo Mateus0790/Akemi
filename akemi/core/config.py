@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     twitch_nick: str = ""  # vazio = leitura anônima
     twitch_oauth_token: str = ""
 
+    # --- Voz ---
+    tts_engine: Literal["console", "piper"] = "console"
+    piper_model_path: Path = Path("data/voices/pt_BR-faber-medium.onnx")
+    piper_speaker_id: int | None = None
+    piper_length_scale: float = 1.0  # >1 fala mais devagar
+    piper_volume: float = 1.0
+    tts_output_device: str | None = None  # nome/índice da saída de áudio (vazio = padrão)
+
     # --- Rede ---
     hermes_api_url: str = "http://localhost:5000"
     control_api_host: str = "127.0.0.1"

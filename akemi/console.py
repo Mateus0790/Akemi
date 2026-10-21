@@ -2,6 +2,7 @@
 
     python -m akemi.console            # usa o provider do .env
     python -m akemi.console --echo     # sem API key (respostas de teste)
+    python -m akemi.console --voz      # fala em voz alta (Piper)
 
 Comandos:
     /chat <nick> <mensagem>   simula uma mensagem do chat da live
@@ -29,8 +30,10 @@ async def _ainput(prompt: str) -> str:
     return await asyncio.to_thread(input, prompt)
 
 
-async def run(echo: bool) -> None:
+async def run(echo: bool, voice: bool = False) -> None:
     settings = Settings()
+    if voice:
+        settings.tts_engine = "piper"
     if echo:
         settings.brain_provider = "echo"
         settings.deep_provider = None
@@ -83,6 +86,7 @@ async def run(echo: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Converse com a Akemi pelo terminal")
     parser.add_argument("--echo", action="store_true", help="usa o provider offline de teste")
+    parser.add_argument("--voz", action="store_true", help="fala em voz alta com o Piper")
     args = parser.parse_args()
     if sys.platform == "win32":
         try:
@@ -90,7 +94,7 @@ def main() -> None:
         except Exception:
             pass
     try:
-        asyncio.run(run(args.echo))
+        asyncio.run(run(args.echo, args.voz))
     except KeyboardInterrupt:
         pass
 

@@ -93,7 +93,8 @@ async def tocar_musica(nome: str) -> str:
 
 ## Próximos passos
 
-1. TTS de verdade (Piper local ou serviço de voz) implementando `TTSEngine`.
+1. ~~TTS de verdade~~ — Piper (`tts/piper_engine.py`). O `Speaker` publica
+   `speech.started` / `speech.finished`, que o avatar pode usar para a boca.
 2. Microfone do dono → `owner.message` (hoje o áudio capturado é o *loopback*,
    ou seja, o que sai das caixas de som — por isso entra como `ambient.audio`).
 3. Visão: diferença de quadros + OCR → `ambient.screen`.

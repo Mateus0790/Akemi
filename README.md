@@ -31,10 +31,11 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
 - Gatilhos para comentários espontâneos (`akemi/brain/triggers.yaml`)
 - Captura de áudio do sistema (WASAPI loopback) → VAD → segmentação → Whisper
+- **Voz local com Piper** (pt-BR, offline), interrompível, com escolha da saída de áudio
 - Modo console para conversar sem áudio
 
-**Ainda falta:** TTS real (hoje a fala sai no terminal), microfone do dono,
-visão/OCR, integração com o Hermes, avatar e self-improve.
+**Ainda falta:** microfone do dono, visão/OCR, integração com o Hermes, avatar
+e self-improve.
 
 ## Instalação
 
@@ -67,6 +68,22 @@ Comandos no console:
 | `/pensar` | força um momento de pensamento |
 | `/estado` | mostra humor, objetivo e tarefas |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
+
+## Voz
+
+```powershell
+pip install -e ".[tts]"
+python -m piper.download_voices pt_BR-faber-medium --data-dir data/voices
+akemi --voz
+```
+
+Para deixar a voz ligada sempre, coloque `TTS_ENGINE=piper` no `.env`. Outras
+vozes pt-BR: `pt_BR-cadu-medium`, `pt_BR-jeff-medium`, `pt_BR-edresson-low`
+(troque também `PIPER_MODEL_PATH`). `PIPER_LENGTH_SCALE` ajusta a velocidade.
+
+Para a live, aponte `TTS_OUTPUT_DEVICE` para um cabo virtual (ex.: VB-Cable) e
+capture esse dispositivo no OBS. Enquanto ela fala, o áudio do sistema não é
+transcrito, para ela não "ouvir a si mesma".
 
 Para ligar o chat da Twitch, preencha `TWITCH_CHANNEL` no `.env`. Para ouvir o
 áudio do PC: `pip install -e ".[audio,stt]"` e `SYSTEM_AUDIO_ENABLED=true`.
