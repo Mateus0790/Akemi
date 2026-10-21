@@ -95,7 +95,12 @@ foreach ($f in "kokoro-v1.0.int8.onnx","voices-v1.0.bin") { curl.exe -L -o data\
 ```
 
 No `.env`: `TTS_ENGINE=kokoro`. Depois é só `akemi --voz`. `KOKORO_SPEED`
-ajusta a velocidade.
+ajusta a velocidade (0.95 deixa a fala mais calma).
+
+O modelo int8 é pequeno, mas soa um pouco áspero. Para uma voz mais suave,
+baixe também `kokoro-v1.0.fp16.onnx` (177 MB, mesmo link) e use
+`KOKORO_MODEL_PATH=data/voices/kokoro/kokoro-v1.0.fp16.onnx`. Na CPU ele
+gera a voz na mesma velocidade.
 
 Para a live, aponte `TTS_OUTPUT_DEVICE` para um cabo virtual (ex.: VB-Cable) e
 capture esse dispositivo no OBS. Enquanto ela fala, o áudio do sistema não é
