@@ -15,6 +15,7 @@ tocada em blocos curtos que podem ser interrompidos.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from pathlib import Path
 from typing import Any
@@ -68,6 +69,8 @@ class KokoroTTS(TTSEngine):
             except ImportError as exc:  # pragma: no cover - depende do extra
                 raise RuntimeError('Instale o extra de voz: pip install -e ".[kokoro]"') from exc
             self._kokoro = Kokoro(str(self.model_path), str(self.voices_path))
+            # "words count mismatch" a cada frase em pt-BR: inofensivo e barulhento.
+            logging.getLogger("phonemizer").setLevel(logging.ERROR)
             if self.voice not in self._kokoro.get_voices():
                 raise ValueError(f"Voz {self.voice!r} não existe no Kokoro")
             logger.info("kokoro voice loaded", voice=self.voice)

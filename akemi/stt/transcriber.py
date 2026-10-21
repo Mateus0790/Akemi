@@ -65,6 +65,23 @@ class SpeechSegmenter:
         return None
 
 
+class Transcript(str):
+    """Texto transcrito com a confiança do Whisper.
+
+    É uma ``str`` para quem só quer o texto; o listener do microfone usa a
+    confiança para descartar ruído transcrito como frase ("de sésar.").
+    """
+
+    avg_logprob: float
+    no_speech_prob: float
+
+    def __new__(cls, text: str, avg_logprob: float = 0.0, no_speech_prob: float = 0.0) -> "Transcript":
+        obj = super().__new__(cls, text)
+        obj.avg_logprob = avg_logprob
+        obj.no_speech_prob = no_speech_prob
+        return obj
+
+
 class WhisperTranscriber:
     def __init__(
         self,
@@ -85,7 +102,7 @@ class WhisperTranscriber:
         self._model = WhisperModel(model_size, device=device, compute_type=compute)
         logger.info("whisper loaded", model=model_size)
 
-    def _transcribe_sync(self, pcm16: bytes) -> str:
+    def _transcribe_sync(self, pcm16: bytes) -> Transcript:
         audio = np.frombuffer(pcm16, dtype=np.int16).astype(np.float32) / 32768.0
         segments, _ = self._model.transcribe(
             audio,
@@ -95,7 +112,14 @@ class WhisperTranscriber:
             initial_prompt=self.initial_prompt,
             condition_on_previous_text=False,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        segments = list(segments)
+        text = " ".join(s.text.strip() for s in segments).strip()
+        if not segments:
+            return Transcript(text)
+        # Média ponderada pela duração de cada trecho.
+        weights = [max(s.end - s.start, 0.01) for s in segments]
+        avg = sum(s.avg_logprob * w for s, w in zip(segments, weights)) / sum(weights)
+        return Transcript(text, avg, max(s.no_speech_prob for s in segments))
 
     async def transcribe(self, pcm16: bytes) -> str:
         async with self._lock:

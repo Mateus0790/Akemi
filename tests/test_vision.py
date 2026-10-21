@@ -250,3 +250,27 @@ async def test_error_on_screen_makes_her_comment(tmp_path):
     await akemi.stop()
     assert tts.said == ["Opa, apareceu um erro aí."]
     assert "[ambient.screen] Janela: cmd.exe" in context
+
+
+def test_prepare_for_ocr_inverts_dark_screens():
+    from akemi.vision.ocr import prepare_for_ocr
+
+    dark = np.full((4, 4, 3), 20, dtype=np.uint8)
+    light = np.full((4, 4, 3), 230, dtype=np.uint8)
+    assert prepare_for_ocr(dark).tolist() == np.full((4, 4), 235).tolist()
+    assert prepare_for_ocr(light).tolist() == np.full((4, 4), 230).tolist()
+
+
+def test_lines_from_data_drops_low_confidence_and_keeps_layout():
+    from akemi.vision.ocr import lines_from_data
+
+    data = {
+        "text": ["Procurar", "", "Gutodirictom", "Onde", "está", "Criar"],
+        "conf": [96, -1, 31, 91, 88, "95.5"],
+        "block_num": [1, 1, 1, 2, 2, 1],
+        "par_num": [1, 1, 1, 1, 1, 1],
+        "line_num": [1, 1, 2, 1, 1, 3],
+    }
+    # Colunas diferentes (blocos) não se misturam numa linha só.
+    assert lines_from_data(data, 60) == "Procurar\nOnde está\nCriar"
+    assert "Gutodirictom" in lines_from_data(data, 0)
