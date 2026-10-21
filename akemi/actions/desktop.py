@@ -248,7 +248,7 @@ def register_desktop_actions(
     async def abrir_programa(nome: str) -> str:
         # Get-StartApps leva ~1 s na primeira vez: fora do loop de eventos.
         app = await asyncio.to_thread(menu.open, nome)
-        return f"Abrindo o {app.name}."
+        return f"Abrindo {app.name}."
 
     @registry.register("abrir_site", "abre um site no navegador", params={"url": "endereço http(s)"})
     def abrir_site(url: str) -> str:
@@ -261,14 +261,14 @@ def register_desktop_actions(
 
     @registry.register("fechar_programa", "fecha um programa aberto (como clicar no X)", tier=Tier.CONFIRM,
                        example=('fecha o Discord', '[[acao:fechar_programa {"nome": "Discord"}]]'),
-                       params={"nome": "nome do programa"}, confirm="Fecho o {nome}?")
+                       params={"nome": "nome do programa"}, confirm="Fecho {nome}?")
     def fechar_programa(nome: str) -> str:
         found = find_windows(nome, windows())
         if not found:
             raise ValueError(f"não achei {nome} aberto")
         for w in found:
             close(w)
-        return f"Fechei o {nome}."
+        return f"Fechei {nome}."
 
     @registry.register("pesquisar", "pesquisa no Google ou no YouTube e abre no navegador",
                        example=('pesquisa lo-fi no YouTube', '[[acao:pesquisar {"termo": "lo-fi", "onde": "youtube"}]]'),

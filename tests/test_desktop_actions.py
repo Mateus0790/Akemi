@@ -117,7 +117,7 @@ def test_find_windows():
 async def test_close_program_asks_first():
     reg, _, _, closed, _ = make(WINDOWS)
     r = await run(reg, "fechar_programa", nome="Discord")
-    assert r.status == "pending_confirmation" and r.detail == "Fecho o Discord? Diz sim ou não."
+    assert r.status == "pending_confirmation" and r.detail == "Fecho Discord? Diz sim ou não."
     assert closed == []
     r = await reg.resolve_confirmation(True, Trust.OWNER)
     assert r.status == "executed" and [w.hwnd for w in closed] == [1]

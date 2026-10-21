@@ -284,7 +284,7 @@ async def test_pc_action_runs_on_the_body(pc_core, pc_body):
     body, pc, tts = pc_body
     assert pc_core.akemi.actions.get("abrir_programa") is not None
     await body.owner_say("abre o discord")
-    await until(lambda: tts.said == ["Abrindo o Discord."])
+    await until(lambda: tts.said == ["Abrindo Discord."])
     assert [a.name for a in pc.launched] == ["Discord"]
 
 
@@ -292,7 +292,7 @@ async def test_pc_action_runs_on_the_body(pc_core, pc_body):
 async def test_close_program_confirms_through_the_body(pc_core, pc_body):
     body, pc, tts = pc_body
     await body.owner_say("fecha o spotify")
-    await until(lambda: tts.said == ["Fecho o Spotify? Diz sim ou não."])
+    await until(lambda: tts.said == ["Fecho Spotify? Diz sim ou não."])
     assert pc.closed == []
     await body.owner_say("sim")
     await until(lambda: len(tts.said) == 2)
