@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 
 import structlog
 
@@ -95,7 +94,7 @@ class Akemi:
         register_builtin_actions(self.actions, self.memory, self.state)
         self.reminders = Reminders(self._remind)
         register_reminder_actions(self.actions, self.reminders)
-        if sys.platform == "win32" and desktop_actions:
+        if desktop_actions:
             from akemi.actions.desktop import register_desktop_actions
 
             register_desktop_actions(self.actions)

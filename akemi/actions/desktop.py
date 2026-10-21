@@ -9,6 +9,7 @@ testável sem Windows.
 
 from __future__ import annotations
 
+import asyncio
 import difflib
 import json
 import os
@@ -18,7 +19,7 @@ import sys
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
 import structlog
 
@@ -226,6 +227,10 @@ def find_windows(query: str, windows: list[Window]) -> list[Window]:
 
 
 # --------------------------------------------------------------- registro
+# Ações que mexem no PC. No modo servidor + corpo, o núcleo encaminha só estas
+# ao corpo, e o corpo só aceita estas.
+PC_ACTIONS = ("abrir_programa", "abrir_site", "fechar_programa", "pesquisar", "midia", "volume")
+
 def register_desktop_actions(
     registry: ActionRegistry,
     *,
@@ -240,19 +245,30 @@ def register_desktop_actions(
     @registry.register("abrir_programa", "abre qualquer programa ou jogo do Menu Iniciar pelo nome",
                        example=('abre o Spotify', '[[acao:abrir_programa {"nome": "Spotify"}]]'),
                        params={"nome": "nome do programa, ex. Discord, Spotify, VS Code"})
-    def abrir_programa(nome: str) -> str:
-        return f"Abrindo o {menu.open(nome).name}."
+    async def abrir_programa(nome: str) -> str:
+        # Get-StartApps leva ~1 s na primeira vez: fora do loop de eventos.
+        app = await asyncio.to_thread(menu.open, nome)
+        return f"Abrindo {app.name}."
+
+    @registry.register("abrir_site", "abre um site no navegador", params={"url": "endereço http(s)"})
+    def abrir_site(url: str) -> str:
+        if "://" not in url:
+            url = "https://" + url
+        if urlparse(url).scheme not in ("http", "https"):
+            raise ValueError("só http/https")
+        open_url(url)
+        return "Abrindo."
 
     @registry.register("fechar_programa", "fecha um programa aberto (como clicar no X)", tier=Tier.CONFIRM,
                        example=('fecha o Discord', '[[acao:fechar_programa {"nome": "Discord"}]]'),
-                       params={"nome": "nome do programa"}, confirm="Fecho o {nome}?")
+                       params={"nome": "nome do programa"}, confirm="Fecho {nome}?")
     def fechar_programa(nome: str) -> str:
         found = find_windows(nome, windows())
         if not found:
             raise ValueError(f"não achei {nome} aberto")
         for w in found:
             close(w)
-        return f"Fechei o {nome}."
+        return f"Fechei {nome}."
 
     @registry.register("pesquisar", "pesquisa no Google ou no YouTube e abre no navegador",
                        example=('pesquisa lo-fi no YouTube', '[[acao:pesquisar {"termo": "lo-fi", "onde": "youtube"}]]'),

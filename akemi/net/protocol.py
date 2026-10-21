@@ -6,6 +6,7 @@ Corpo → núcleo
     ``owner_speech_started`` {}               o dono começou a falar (interrompe)
     ``ambient``        {kind, text}           tela/áudio do PC (Trust.PUBLIC)
     ``spoken``         {id, status}           terminou de falar o ``say`` ``id``
+    ``action_result``  {id, status, value, detail}  resultado de um ``action``
     ``pause`` / ``resume`` {}                 liga/desliga a autonomia
 
 Núcleo → corpo
@@ -13,6 +14,9 @@ Núcleo → corpo
     ``say``            {id, text, origin_trust}  fale isto
     ``stop``           {}                     pare de falar e descarte a fila
     ``paused``         {paused}               estado da pausa mudou
+    ``action``         {id, name, args}       execute esta ação do PC (o núcleo já
+                                              checou o dono e o "sim"; o corpo só
+                                              aceita as de ``PC_ACTIONS``)
 """
 
 from __future__ import annotations

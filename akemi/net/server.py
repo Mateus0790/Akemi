@@ -22,6 +22,8 @@ from typing import Any
 
 import structlog
 
+from akemi.actions.desktop import PC_ACTIONS, register_desktop_actions
+from akemi.actions.registry import ActionRegistry
 from akemi.core.config import Settings
 from akemi.core.events import Event, Priority, Trust
 from akemi.core.orchestrator import Akemi
@@ -40,6 +42,7 @@ class BodyLink:
     def __init__(self) -> None:
         self.conn: Any = None
         self._pending: dict[int, asyncio.Future[str]] = {}
+        self._actions: dict[int, asyncio.Future] = {}
         self._ids = itertools.count(1)
 
     @property
@@ -67,6 +70,9 @@ class BodyLink:
             if not fut.done():
                 fut.set_result("disconnected")
         self._pending.clear()
+        for fut in self._actions.values():
+            if not fut.done():
+                fut.set_result({"status": "disconnected"})
 
     async def send(self, type_: str, **fields: Any) -> bool:
         conn = self.conn
@@ -93,6 +99,28 @@ class BodyLink:
         fut = self._pending.pop(sid, None) if isinstance(sid, int) else None
         if fut is not None and not fut.done():
             fut.set_result(status)
+
+    async def request_action(self, name: str, args: dict, timeout: float = 20.0) -> dict:
+        """Pede ao corpo para executar uma ação do PC e espera o resultado."""
+        aid = next(self._ids)
+        fut: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._actions[aid] = fut
+        try:
+            if not await self.send("action", id=aid, name=name, args=args):
+                raise ValueError("o PC não está conectado")
+            result = await asyncio.wait_for(fut, timeout)
+        except asyncio.TimeoutError as exc:
+            raise ValueError("o PC não respondeu") from exc
+        finally:
+            self._actions.pop(aid, None)
+        if result.get("status") == "disconnected":
+            raise ValueError("o PC desconectou")
+        return result
+
+    def resolve_action(self, msg: dict) -> None:
+        fut = self._actions.get(msg.get("id")) if isinstance(msg.get("id"), int) else None
+        if fut is not None and not fut.done():
+            fut.set_result(msg)
 
 
 class RemoteVoice(TTSEngine):
@@ -168,6 +196,8 @@ class AkemiServer:
                 akemi.observe(msg["kind"], text)
         elif kind == "spoken":
             self.link.resolve(msg.get("id"), str(msg.get("status", "done")))
+        elif kind == "action_result":
+            self.link.resolve_action(msg)
         elif kind in ("pause", "resume"):
             if kind == "pause":
                 akemi.pause.pause("corpo")
@@ -224,11 +254,38 @@ class AkemiServer:
         return await serve(self.handler, host, port, process_request=self.process_request)
 
 
+def register_remote_actions(registry: ActionRegistry, link: BodyLink) -> None:
+    """Registra as ações do PC no núcleo, mas executando no corpo.
+
+    Nome, descrição, exemplo e nível de permissão são os mesmos do modo local:
+    o núcleo continua checando quem pediu e pegando o "sim"; o corpo só executa.
+    """
+    register_desktop_actions(registry)  # só pelos metadados; as funções são trocadas
+    for name in PC_ACTIONS:
+        action = registry.get(name)
+        if action is None:
+            continue
+
+        def make(name: str, original):
+            async def remote(**kwargs):
+                result = await link.request_action(name, kwargs)
+                if result.get("status") != "executed":
+                    raise ValueError(result.get("detail") or "o PC não conseguiu")
+                return result.get("value")
+
+            remote.__wrapped__ = original  # o registro filtra os argumentos pela assinatura original
+            return remote
+
+        action.fn = make(name, action.fn)
+
+
 def build(settings: Settings, **akemi_kwargs) -> AkemiServer:
     # No servidor não há microfone, tela nem placa de som: isso é do corpo.
     settings.mic_enabled = settings.screen_enabled = settings.system_audio_enabled = False
     link = BodyLink()
+    akemi_kwargs.setdefault("desktop_actions", False)
     akemi = Akemi(settings, tts=RemoteVoice(link), **akemi_kwargs)
+    register_remote_actions(akemi.actions, link)
     return AkemiServer(akemi, link, settings.akemi_token)
 
 

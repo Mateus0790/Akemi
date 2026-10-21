@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import webbrowser
-from urllib.parse import urlparse
 
 from akemi.brain.state import InnerState
 from akemi.storage.memory import Memory
@@ -47,13 +45,3 @@ def register_builtin_actions(
     @registry.register("horario", "diz data e hora atuais", speak_result=True)
     def horario() -> str:
         return dt.datetime.now().strftime("%d/%m/%Y %H:%M")
-
-    @registry.register("abrir_site", "abre um site no navegador",
-                       params={"url": "endereço http(s)"})
-    def abrir_site(url: str) -> str:
-        if "://" not in url:
-            url = "https://" + url
-        if urlparse(url).scheme not in ("http", "https"):
-            raise ValueError("só http/https")
-        webbrowser.open(url)
-        return "aberto"
