@@ -116,6 +116,14 @@ UB Mannheim (github.com/UB-Mannheim/tesseract/wiki) e marque o idioma
 **Portuguese**. A pasta padrão é encontrada sozinha; se instalar em outro
 lugar, defina `TESSERACT_CMD`.
 
+Se o Tesseract foi instalado sem o português, dá para baixar os idiomas na
+pasta do projeto (não precisa de administrador):
+
+```powershell
+mkdir data\tessdata
+foreach ($l in "por","eng","osd") { curl.exe -sSL -o data\tessdata\$l.traineddata https://github.com/tesseract-ocr/tessdata_fast/raw/main/$l.traineddata }
+```
+
 A cada `SCREEN_INTERVAL_S` ela tira um print, mas só lê quando a tela muda de
 verdade e para de mudar, ou quando você troca de janela. Num vídeo em tela
 cheia ela não fica lendo sem parar. O que ela vê entra no contexto dela, e
