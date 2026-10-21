@@ -158,6 +158,9 @@ class Akemi:
             )
             self._tasks.append(asyncio.create_task(twitch.run(), name="twitch"))
         self.senses.start()
+        if self.senses.screen is not None:
+            screen = self.senses.screen
+            self.mind.look = lambda: screen.step(force=True, publish=False)
         if self.senses.voice_input is not None:
             self.bus.subscribe("speech.finished", self._on_speech_finished)
         logger.info(

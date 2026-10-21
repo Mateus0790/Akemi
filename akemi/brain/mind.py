@@ -17,6 +17,7 @@ import asyncio
 import re
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import structlog
@@ -36,6 +37,10 @@ logger = structlog.get_logger()
 
 MOOD_TAG_RE = re.compile(r"\[\[\s*humor\s*:\s*([\wçãéíóú]+)\s*\]\]", re.I)
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
+# "o que tem na tela?", "tá vendo isso?", "olha aqui", "lê isso aí"
+SCREEN_QUESTION = re.compile(
+    r"\b(tela|monitor|janela|aparec\w*|mostrando|vendo|v[eê]|olh[ae]\w*|l[eê] (isso|a[ií]|pra mim))\b", re.I
+)
 
 MOOD_INSTRUCTION = (
     "Se o seu humor mudar com essa interação, inclua no fim a tag [[humor:X]] "
@@ -121,6 +126,8 @@ class Mind:
         self.history: deque[Message] = deque(maxlen=20)
         self.live_history: deque[Message] = deque(maxlen=10)
         self.ambient: deque[tuple[float, str, str]] = deque(maxlen=15)
+        # Olhar a tela na hora (definido quando a visão está ligada).
+        self.look: Callable[[], Awaitable[str | None]] | None = None
         self._owner_lock = asyncio.Lock()
         self._live_lock = asyncio.Lock()
         self._think_lock = asyncio.Lock()
@@ -214,6 +221,15 @@ class Mind:
         self.state.last_owner_interaction_at = time.time()
 
         async with self._owner_lock:
+            if self.look is not None and SCREEN_QUESTION.search(text):
+                # Perguntou da tela: olha agora em vez de usar uma leitura antiga.
+                try:
+                    seen = await self.look()
+                except Exception as exc:
+                    logger.warning("fresh screen look failed", error=str(exc))
+                    seen = None
+                if seen:
+                    self.ambient.append((time.time(), "ambient.screen", seen))
             # Resposta a um pedido de confirmação pendente?
             if self.actions.pending is not None:
                 yn = parse_yes_no(text)

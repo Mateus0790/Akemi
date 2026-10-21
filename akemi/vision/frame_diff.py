@@ -36,27 +36,35 @@ class ChangeDetector:
 
     ``update`` devolve ``True`` uma vez por mudança: quando o frame atual
     difere do último *reportado* em mais de ``threshold`` e é praticamente
-    igual ao frame anterior (a tela assentou). Um vídeo tocando em tela cheia
-    nunca assenta, então não fica disparando OCR à toa.
+    igual ao frame anterior (a tela assentou). Uma tela que nunca assenta
+    (vídeo, texto chegando) é lida no máximo a cada ``max_wait_frames``.
     """
 
-    def __init__(self, threshold: float = 0.06, pixel_delta: int = 24) -> None:
+    def __init__(self, threshold: float = 0.06, pixel_delta: int = 24, max_wait_frames: int = 6) -> None:
         self.threshold = threshold
         self.pixel_delta = pixel_delta
+        # Uma tela que nunca para de mudar (texto chegando, vídeo) é lida
+        # mesmo assim depois de tantos frames, para ela não ficar desatualizada.
+        self.max_wait_frames = max_wait_frames
         self._prev: np.ndarray | None = None
         self._reported: np.ndarray | None = None
+        self._waiting = 0
+
+    def _changed(self, a: np.ndarray, b: np.ndarray) -> bool:
+        return changed_fraction(a, b, self.pixel_delta) > self.threshold
 
     def update(self, thumb: np.ndarray) -> bool:
         prev, self._prev = self._prev, thumb
         if prev is None:
             return False
-        if changed_fraction(prev, thumb, self.pixel_delta) > self.threshold:
-            return False  # ainda mudando
-        if self._reported is not None and (
-            changed_fraction(self._reported, thumb, self.pixel_delta) <= self.threshold
-        ):
+        if self._reported is not None and not self._changed(self._reported, thumb):
+            self._waiting = 0
             return False  # é a mesma tela que já lemos
+        if self._changed(prev, thumb) and self._waiting < self.max_wait_frames:
+            self._waiting += 1
+            return False  # ainda mudando
         self._reported = thumb
+        self._waiting = 0
         return True
 
     def reset(self) -> None:
