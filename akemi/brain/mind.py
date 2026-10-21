@@ -139,6 +139,12 @@ class Mind:
         self.history: deque[Message] = deque(maxlen=20)
         self.live_history: deque[Message] = deque(maxlen=10)
         self.ambient: deque[tuple[float, str, str]] = deque(maxlen=15)
+        # Conta o que aconteceu (conversa, chat, percepção). Sem novidade desde
+        # o último pensamento, ela não pensa de novo: sairia o mesmo pensamento.
+        self._novelty = 0
+        self._novelty_at_last_thought = -1
+        self._last_thought_at = 0.0
+        self.max_quiet_s = 1800.0  # mesmo sem novidade, pensa de vez em quando
         # Olhar a tela na hora (definido quando a visão está ligada).
         self.look: Callable[[], Awaitable[str | None]] | None = None
         self._owner_lock = asyncio.Lock()
@@ -252,6 +258,7 @@ class Mind:
         if decision.route == Route.IGNORE:
             return
         self.state.last_owner_interaction_at = time.time()
+        self._novelty += 1
 
         async with self._owner_lock:
             if self.look is not None and SCREEN_QUESTION.search(text):
@@ -310,6 +317,7 @@ class Mind:
         decision = self.attention.decide(event, self.state, paused=self.pause.paused)
         if decision.route == Route.IGNORE:
             return
+        self._novelty += 1
         msgs = event.payload.get("messages", [])
         if not msgs:
             return
@@ -349,6 +357,7 @@ class Mind:
         if decision.route == Route.IGNORE or not text:
             return
         self.ambient.append((event.ts, event.kind, text))
+        self._novelty += 1
         if decision.route != Route.CONSIDER or decision.trigger is None:
             return
         rule = decision.trigger
@@ -375,17 +384,31 @@ class Mind:
     async def on_idle_tick(self, event: Event) -> None:
         if self.pause.paused or self._think_lock.locked():
             return
+        nothing_new = self._novelty == self._novelty_at_last_thought
+        if nothing_new and time.time() - self._last_thought_at < self.max_quiet_s:
+            logger.debug("idle think skipped: nothing new")
+            return
         async with self._think_lock:
             self.state.decay()
             await self.think(event)
 
     async def think(self, origin: Event) -> dict:
         """Um "momento de consciência": reflete, ajusta humor e talvez fala."""
+        self._novelty_at_last_thought = self._novelty
+        self._last_thought_at = time.time()
         system = self.persona.system_prompt(extra=self._context_block())
+        already = list(self.state.recent_thoughts)[-3:]
+        avoid = (
+            "Você já pensou isto (NÃO repita nem reformule):\n" + "\n".join(f"- {t}" for t in already) + "\n"
+            if already
+            else ""
+        )
         prompt = (
-            "Momento de pensamento (ninguém está falando com você). Reflita sobre o que "
-            "percebeu, suas tarefas e seu humor. Responda só com JSON:\n"
-            '{"pensamento": "uma frase íntima, não falada", '
+            "Momento de pensamento (ninguém está falando com você).\n"
+            f"{avoid}"
+            "Pense em algo NOVO: o que mudou, uma lembrança, uma ideia, uma vontade, algo sobre "
+            "você mesma. Se nada novo aconteceu, deixe o pensamento vazio. Responda só com JSON:\n"
+            '{"pensamento": "uma frase curta (até 20 palavras), íntima, não falada", '
             f'"humor": "um de {list(MOODS)}", '
             '"falar": "frase curta para dizer em voz alta, ou vazio se for melhor ficar quieta"}'
         )
@@ -403,8 +426,10 @@ class Mind:
         data = parse_json_object(raw)
         thought = str(data.get("pensamento", "")).strip()
         if thought:
-            self.state.remember_thought(thought)
-            logger.info("thought", text=thought)
+            if self.state.remember_thought(thought):
+                logger.info("thought", text=thought)
+            else:
+                logger.info("thought repeated, dropped", text=thought)
         if mood := data.get("humor"):
             self.state.set_mood(str(mood), 0.5)
         speak = str(data.get("falar", "") or "").strip()

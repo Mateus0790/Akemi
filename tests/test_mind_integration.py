@@ -182,3 +182,29 @@ def test_persona_examples_in_prompt():
     prompt = p.system_prompt()
     assert "Fulano: Akemi, tá me ouvindo?" in prompt and "Akemi: Alto e claro." in prompt
     assert "Exemplos" not in p.system_prompt(live=True)
+
+
+@pytest.mark.asyncio
+async def test_idle_thinking_needs_something_new(tmp_path):
+    from akemi.core.events import Event
+
+    calls = []
+
+    def responder(msgs, json_mode):
+        calls.append(msgs[-1].content)
+        return '{"pensamento": "pensamento %d sobre algo diferente", "humor": "curiosa", "falar": ""}' % len(calls)
+
+    akemi, tts, _ = make_akemi(responder, tmp_path)
+    tick = Event("tick.idle", source="timer")
+    await akemi.mind.on_idle_tick(tick)
+    await akemi.mind.on_idle_tick(tick)  # nada aconteceu: não pensa de novo
+    assert len(calls) == 1
+    akemi.mind.max_quiet_s = 0  # muito tempo quieta: pensa mesmo sem novidade
+    await akemi.mind.on_idle_tick(tick)
+    assert len(calls) == 2
+    akemi.mind.max_quiet_s = 1800
+    akemi.mind._novelty += 1  # algo novo (tela, conversa, chat)
+    await akemi.mind.on_idle_tick(tick)
+    assert len(calls) == 3
+    assert "NÃO repita" in calls[-1] and "pensamento 1" in calls[-1]
+    await akemi.stop()
