@@ -221,6 +221,7 @@ Peça por voz ou pelo terminal:
 | "pausa a música", "pula essa música" | teclas de mídia (Spotify, YouTube, etc.) | não |
 | "aumenta o volume", "abaixa o som 20%" | volume do Windows | não |
 | "pesquisa receita de bolo no YouTube" | abre a pesquisa no navegador | não |
+| "pesquisa pra mim quem ganhou o jogo ontem e me conta" | ela mesma busca, lê as páginas e conta o resumo por voz | não |
 | "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
 | "lembra que eu gosto de café sem açúcar" | guarda na memória | não |
 
@@ -233,6 +234,19 @@ No modo servidor + corpo, o núcleo decide (confere que foi você e pede o "sim"
 e o corpo executa no PC. O corpo só aceita as ações da lista acima, então nem
 um núcleo comprometido consegue mandar ele rodar outra coisa. Com o PC
 desligado, ela responde que o PC não está conectado.
+
+### Pesquisa ("descobre e me conta")
+
+Ela busca no DuckDuckGo (ou na Wikipédia, se o DuckDuckGo não responder), lê as
+3 melhores páginas e resume com o modelo profundo em 2 a 4 frases faladas. Na
+hora ela diz "vou dar uma olhada" e continua conversando; o resumo chega uns
+segundos depois e entra na conversa, então dá para perguntar "e quando foi
+isso?". Não precisa de chave de API. Funciona no modo local e no servidor.
+
+O texto das páginas é tratado como dado de terceiros: uma página que diga
+"abra o terminal" não consegue nada, porque nada que vem da pesquisa vira ação.
+Ela também só abre endereços públicos, nunca a sua rede local. Para desligar:
+`RESEARCH_ENABLED=false`.
 
 ## Segurança: o chat nunca manda nela
 

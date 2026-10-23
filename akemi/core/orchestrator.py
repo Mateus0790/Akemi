@@ -9,9 +9,11 @@ import structlog
 from akemi.actions.builtin import register_builtin_actions
 from akemi.actions.registry import ActionRegistry
 from akemi.actions.reminders import Reminders, register_reminder_actions
+from akemi.actions.research import Researcher, register_research_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import LLMProvider, build_provider
+from akemi.brain.providers.base import Message
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
 from akemi.core.config import Settings
@@ -94,6 +96,13 @@ class Akemi:
         register_builtin_actions(self.actions, self.memory, self.state)
         self.reminders = Reminders(self._remind)
         register_reminder_actions(self.actions, self.reminders)
+        self.researcher: Researcher | None = None
+        if settings.research_enabled:
+            self.researcher = Researcher(
+                self.models.deep, self.models.deep_model, self._research_done,
+                owner=settings.owner_name, max_pages=settings.research_max_pages,
+            )
+            register_research_actions(self.actions, self.researcher)
         if desktop_actions:
             from akemi.actions.desktop import register_desktop_actions
 
@@ -135,6 +144,16 @@ class Akemi:
             Event("speech.say", {"text": f"Ei, {self.settings.owner_name}, lembrete: {text}", "origin": "lembrete"},
                   source="lembrete", trust=Trust.SYSTEM, priority=Priority.HIGH)
         )
+
+    def _research_done(self, question: str, answer: str) -> None:
+        self.bus.publish(
+            Event("speech.say", {"text": answer, "origin": "pesquisa"},
+                  source="pesquisa", trust=Trust.SYSTEM, priority=Priority.HIGH)
+        )
+        # Entra na conversa: dá para perguntar "e quando foi isso?" depois.
+        self.mind.history.append(Message("user", f"(Você terminou a pesquisa: {question})"))
+        self.mind.history.append(Message("assistant", answer))
+        self.memory.add_episode("pesquisa", f"Pesquisei: {question}\nResultado: {answer}")
 
     def chat_message(self, user: str, text: str, platform: str = "console") -> bool:
         return self.chat.add(ChatMessage(user=user, text=text, platform=platform))

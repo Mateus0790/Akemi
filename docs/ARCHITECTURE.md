@@ -106,6 +106,15 @@ A Akemi pode rodar dividida em dois processos:
   links e markdown; bloqueia ofensas.
 - O chat é agrupado, deduplicado, com cooldown por usuário e limite por minuto.
 
+### Pesquisa
+
+`investigar` é a única ação que traz texto de fora para o modelo. Por isso:
+o resumo é feito numa chamada separada, com as páginas marcadas como dados de
+terceiros; as tags `[[...]]` da resposta são apagadas sem executar; e cada URL
+(inclusive depois de cada redirecionamento) precisa resolver para um IP público,
+para uma página não levar o servidor a acessar a rede local. O resumo é falado
+com `Trust.SYSTEM`, como os lembretes.
+
 ## Protocolo de ações
 
 O modelo pede ações com tags no texto, que nunca são faladas:

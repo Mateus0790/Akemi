@@ -40,7 +40,7 @@ MOOD_TAG_RE = re.compile(r"\[\[\s*humor\s*:\s*([\wçãéíóú]+)\s*\]\]", re.I)
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
 # Promessa de ação sem a tag ("vou te lembrar", "abrindo o Discord", "anotado").
 ACTION_PROMISE_RE = re.compile(
-    r"\b((vou|j[aá] vou|deixa que eu|pode deixar que eu)\s+(te\s+)?(lembrar|avisar|abrir|fechar|pausar|tocar|pesquisar|anotar|guardar|aumentar|abaixar|baixar|pular|mutar)|te (lembro|aviso)|(eu )?me lembro|guardo|(abrindo|fechando|pausando|pesquisando|anotando|guardando|pulando)|anotad[oa]|guardad[oa])\b",
+    r"\b((vou|j[aá] vou|deixa que eu|pode deixar que eu)\s+(te\s+)?(lembrar|avisar|abrir|fechar|pausar|tocar|pesquisar|anotar|guardar|aumentar|abaixar|baixar|pular|mutar)|vou dar uma olhada|te (lembro|aviso)|(eu )?me lembro|guardo|(abrindo|fechando|pausando|pesquisando|anotando|guardando|pulando)|anotad[oa]|guardad[oa])\b",
     re.I,
 )
 # Auto-apresentação que o modelo insiste em fazer mesmo instruído a não fazer

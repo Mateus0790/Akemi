@@ -270,7 +270,7 @@ def register_desktop_actions(
             close(w)
         return f"Fechei {nome}."
 
-    @registry.register("pesquisar", "pesquisa no Google ou no YouTube e abre no navegador",
+    @registry.register("pesquisar", "abre uma pesquisa do Google ou do YouTube no navegador, para ELE ver",
                        example=('pesquisa lo-fi no YouTube', '[[acao:pesquisar {"termo": "lo-fi", "onde": "youtube"}]]'),
                        params={"termo": "o que pesquisar", "onde": "google ou youtube (padrão google)"})
     def pesquisar(termo: str, onde: str = "google") -> str:

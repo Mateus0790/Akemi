@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     vision_provider: ProviderName | None = None  # default = brain_provider
     vision_describe_interval_s: float = 45.0
 
+    # --- Pesquisa ("pesquisa X e me conta") ---
+    research_enabled: bool = True  # ela busca na internet (DuckDuckGo/Wikipédia) e resume
+    research_max_pages: int = 3  # páginas lidas por pesquisa
+
     @property
     def effective_deep_provider(self) -> ProviderName:
         return self.deep_provider or self.brain_provider
