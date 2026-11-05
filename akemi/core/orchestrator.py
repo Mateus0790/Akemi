@@ -139,6 +139,7 @@ class Akemi:
         )
         # Só o modo local é "corpo" do próprio núcleo; o servidor anuncia o corpo remoto.
         self.local_body = True
+        self.phone = None  # CompanionHub, quando o app do celular está liberado
 
         self.mind = Mind(
             self.bus,

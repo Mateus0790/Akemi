@@ -128,3 +128,5 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+# App do celular (Flutter): o código fica em app/lib, que a regra "lib/" acima esconderia
+!app/lib/

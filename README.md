@@ -49,6 +49,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   - vontade própria: gostos, opiniões, vontades e objetivos que ela forma sozinha
   - iniciativa estilo J.A.R.V.I.S.: faz ações seguras por conta própria e te conta
 
+- **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
+  Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
+
 **Ainda falta:** integração com o Hermes e avatar.
 
 ## Instalação

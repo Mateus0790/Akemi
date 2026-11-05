@@ -5,6 +5,7 @@
     python -m akemi.console --voz      # fala em voz alta (Piper)
     python -m akemi.console --mic      # ouve você pelo microfone (diga "Akemi, ...")
     python -m akemi.console --tela     # olha a tela (OCR + modelo de visão opcional)
+    python -m akemi.console --celular  # deixa o app do celular conectar (precisa de AKEMI_TOKEN)
 
 Comandos:
     /chat <nick> <mensagem>   simula uma mensagem do chat da live
@@ -39,7 +40,45 @@ async def _ainput(prompt: str) -> str:
     return await asyncio.to_thread(input, prompt)
 
 
-async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool = False) -> None:
+def lan_address() -> str:
+    """O IP deste PC na rede de casa (para digitar no app do celular)."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))  # UDP: não manda nada, só escolhe a interface
+            return s.getsockname()[0]
+    except OSError:
+        return "IP-DESTE-PC"
+
+
+async def start_phone(akemi: Akemi):
+    """Abre a porta para o app do celular. Devolve o servidor (ou None se não deu)."""
+    from akemi.net.companion import CompanionHub
+    from akemi.net.server import MIN_TOKEN_LEN
+
+    s = akemi.settings
+    if len(s.akemi_token) < MIN_TOKEN_LEN:
+        print(
+            "  (celular desligado: defina AKEMI_TOKEN com pelo menos 16 caracteres no .env. Gere com:\n"
+            '   python -c "import secrets; print(secrets.token_urlsafe(24))")'
+        )
+        return None
+    hub = CompanionHub(akemi, s.akemi_token)
+    hub.install()
+    akemi.phone = hub
+    try:
+        ws = await hub.serve(s.server_host, s.server_port)
+    except OSError as exc:
+        print(f"  (celular desligado: não consegui abrir a porta {s.server_port}: {exc})")
+        return None
+    print(f"  📱 App do celular: servidor ws://{lan_address()}:{s.server_port} (mesmo Wi-Fi, mesmo AKEMI_TOKEN)")
+    return ws
+
+
+async def run(
+    echo: bool, voice: bool = False, mic: bool = False, screen: bool = False, phone: bool = False
+) -> None:
     settings = Settings()
     if voice:
         if settings.tts_engine == "console":  # TTS_ENGINE do .env escolhe a voz
@@ -54,6 +93,7 @@ async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool =
     configure_logging(settings.log_level, settings.log_json)
     akemi = Akemi(settings)
     await akemi.start()
+    phone_ws = await start_phone(akemi) if phone else None
     print("Akemi no console. Digite /sair para encerrar, /ajuda para comandos.\n")
     try:
         while True:
@@ -95,6 +135,9 @@ async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool =
             elif line == "/corpo":
                 st = akemi.state
                 print(f"  corpo: {st.body or '—'} | sentidos: {', '.join(st.senses) or 'nenhum'}")
+                if akemi.phone is not None:
+                    ph = akemi.phone.status()
+                    print(f"  celular: {ph['nome'] or 'desconectado'}{' (respondendo nele)' if ph['em_foco'] else ''}")
             elif line == "/evolucao":
                 print(akemi.evolution.describe())
             elif line == "/evoluir":
@@ -136,6 +179,8 @@ async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool =
                 akemi.owner_say(line)
             await asyncio.sleep(0.1)
     finally:
+        if phone_ws is not None:
+            phone_ws.close()
         await akemi.stop()
 
 
@@ -145,6 +190,7 @@ def main() -> None:
     parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão Piper)")
     parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
+    parser.add_argument("--celular", action="store_true", help="deixa o app do celular conectar")
     parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")
     args = parser.parse_args()
     if args.listar_mics:
@@ -158,7 +204,7 @@ def main() -> None:
         except Exception:
             pass
     try:
-        asyncio.run(run(args.echo, args.voz, args.mic, args.tela))
+        asyncio.run(run(args.echo, args.voz, args.mic, args.tela, args.celular))
     except KeyboardInterrupt:
         pass
 
