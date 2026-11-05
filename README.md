@@ -28,7 +28,7 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Pensamento ocioso: ela reflete sozinha e decide se fala algo
 - Memória SQLite (conversas + fatos) com busca por relevância
 - Ações com permissão: livres, com confirmação por voz, ou proibidas
-- Chat da Twitch (sem dependências, modo anônimo), com agrupamento, seleção, cooldown e limite
+- Chat da live com agrupamento, seleção, cooldown e limite (sem plataforma ligada: teste com `/chat`)
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
 - Gatilhos para comentários espontâneos (`akemi/brain/triggers.yaml`)
 - Captura de áudio do sistema (WASAPI loopback) → VAD → segmentação → Whisper
@@ -45,7 +45,7 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - **Independência** ([docs/INDEPENDENCIA.md](docs/INDEPENDENCIA.md)):
   - cérebro reserva local (Ollama/llama.cpp): se a nuvem cair, ela troca sozinha e volta depois
-  - autocura: reinicia o que quebrar (Twitch, chat, voz, rotinas) e te avisa (`/saude`)
+  - autocura: reinicia o que quebrar (chat, voz, rotinas) e te avisa (`/saude`)
   - vontade própria: gostos, opiniões, vontades e objetivos que ela forma sozinha
   - iniciativa estilo J.A.R.V.I.S.: faz ações seguras por conta própria e te conta
 
@@ -178,7 +178,7 @@ substitui essa lista). Prints não são salvos em disco. O texto lido vai para o
 provider do LLM, então com provider na nuvem ele sai do PC. `/pausar`
 desliga a visão na hora.
 
-Para ligar o chat da Twitch, preencha `TWITCH_CHANNEL` no `.env`. Para ouvir o
+Para ouvir o
 áudio do PC: `pip install -e ".[audio,stt]"` e `SYSTEM_AUDIO_ENABLED=true`.
 
 ## Funcionando 24h (servidor + PC)

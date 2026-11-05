@@ -306,14 +306,6 @@ class Akemi:
         if self.persist and self.settings.self_improve_interval_s > 0:
             self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
         self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
-        if self.settings.twitch_channel:
-            from akemi.live.twitch import TwitchChat
-
-            twitch = TwitchChat(
-                self.settings.twitch_channel, self.chat,
-                self.settings.twitch_nick, self.settings.twitch_oauth_token,
-            )
-            self._tasks.append(self._supervised("twitch", twitch.run, "conexão com a Twitch"))
         self.senses.start()
         if self.senses.screen is not None:
             screen = self.senses.screen

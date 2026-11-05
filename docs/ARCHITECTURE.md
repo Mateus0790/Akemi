@@ -9,7 +9,7 @@ VTuber de IA.
              PERCEPÇÃO                          MENTE                        SAÍDA
  ┌───────────────────────────┐      ┌───────────────────────────┐   ┌──────────────────┐
  │ voz/console do dono  OWNER│─┐    │  AttentionFilter          │   │ Speaker          │
- │ chat Twitch         PUBLIC│─┤    │  ignorar / observar /     │   │  moderação final │
+ │ chat da live        PUBLIC│─┤    │  ignorar / observar /     │   │  moderação final │
  │ áudio do PC (STT)   PUBLIC│─┼──► │  considerar / rápido /    │──►│  fila + interrupção
  │ tela (OCR)          PUBLIC│─┤ Bus│  profundo                 │   │  TTS             │
  │ timer de pensamento SYSTEM│─┘    │        │                  │   └──────────────────┘
@@ -32,7 +32,7 @@ VTuber de IA.
 | `brain/persona.yaml` | Personalidade editável. |
 | `brain/triggers.yaml` | Quando algo percebido merece ser considerado para comentário espontâneo. |
 | `actions/` | Ações com níveis de permissão. |
-| `live/` | Chat da Twitch (IRC), agrupamento, seleção e limite de respostas. |
+| `live/` | Chat da live: agrupamento, seleção e limite de respostas (sem plataforma ligada). |
 | `safety/moderation.py` | Filtro de entrada (chat) e de saída (tudo que vira voz). |
 | `storage/memory.py` | Memória episódica (SQLite FTS5) + fatos. |
 | `stt/` | Segmentação de fala pelo VAD + Whisper. |

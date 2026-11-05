@@ -48,7 +48,7 @@ No Docker do ZimaOS, aponte `OLLAMA_BASE_URL` para o Ollama da sua rede
 
 ## 2. Autocura
 
-- **Tarefas de fundo** (chat da live, Twitch, pensamento ocioso, autoevolução)
+- **Tarefas de fundo** (chat da live, pensamento ocioso, autoevolução)
   rodam supervisionadas: se uma morrer com erro, é reiniciada com espera
   crescente (1 s, 2 s, 4 s... até 60 s). Um bug numa parte não derruba as outras.
 - **Vigia**: a cada 15 s ela confere o barramento de eventos e a fila de fala,
@@ -57,7 +57,7 @@ No Docker do ZimaOS, aponte `OLLAMA_BASE_URL` para o Ollama da sua rede
   exemplo), ela passa a escrever no terminal. Nenhuma frase se perde: a que
   falhou sai no terminal. A cada 60 s tenta a voz de novo e volta sozinha.
 - Ela sabe como está por dentro (entra no prompt só quando algo vai mal) e
-  avisa sem drama: "Ih, minha conexão com a Twitch deu problema. Tô me
+  avisa sem drama: "Ih, minha visão deu problema. Tô me
   consertando." e depois "Pronto, voltou." No máximo um aviso de problema por
   parte a cada 5 minutos. Pausada, ela se conserta calada.
 

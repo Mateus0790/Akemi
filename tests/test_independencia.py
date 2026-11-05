@@ -218,9 +218,9 @@ async def test_supervise_restarts_a_crashed_task():
         return None
 
     h = Health()
-    await asyncio.wait_for(supervise("twitch", flaky, h, label="Twitch", sleep=no_sleep), 2)
+    await asyncio.wait_for(supervise("visao", flaky, h, label="visão", sleep=no_sleep), 2)
     assert len(runs) == 3
-    assert h.components["twitch"].ok and h.components["twitch"].failures == 2
+    assert h.components["visao"].ok and h.components["visao"].failures == 2
 
 
 @pytest.mark.asyncio
@@ -253,10 +253,10 @@ async def test_health_news_is_spoken_and_not_spammed(tmp_path):
     akemi, tts, _ = make_akemi(tmp_path)
     await akemi.start()
     try:
-        akemi.health.report("twitch", False, "caiu", label="conexão com a Twitch")
+        akemi.health.report("visao", False, "caiu", label="visão")
         await settle(akemi)
-        akemi.health.report("twitch", True)
-        akemi.health.report("twitch", False, "caiu de novo")
+        akemi.health.report("visao", True)
+        akemi.health.report("visao", False, "caiu de novo")
         await settle(akemi)
         broke = [s for s in tts.said if "deu problema" in s]
         back = [s for s in tts.said if "voltou" in s]

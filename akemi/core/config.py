@@ -73,11 +73,6 @@ class Settings(BaseSettings):
     chat_batch_window_s: float = 6.0
     chat_max_replies_per_minute: int = 6
 
-    # --- Live ---
-    twitch_channel: str = ""
-    twitch_nick: str = ""  # vazio = leitura anônima
-    twitch_oauth_token: str = ""
-
     # --- Voz ---
     tts_engine: Literal["console", "piper", "kokoro"] = "console"
     # Kokoro: voz feminina pt-BR (pf_dora). Ver akemi/tts/kokoro_engine.py
