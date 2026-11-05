@@ -19,6 +19,8 @@ Comandos:
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
     /voz                      reconhecimento da sua voz: cadastro, limites, quem ela ouviu
+    /pr <pedido>              ela muda o próprio código e abre um PR (OFICINA_ENABLED)
+    /prs                      os PRs que ela abriu ou tentou abrir
     /evolucao                 o que ela mudou em si (e o que está pendente)
     /evoluir                  pede para ela revisar as conversas agora
     /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
@@ -134,6 +136,14 @@ async def run(
                 print(akemi.state.describe())
             elif line == "/saude":
                 print(akemi.describe_health())
+            elif line.startswith("/pr ") or line == "/prs":
+                if akemi.oficina is None:
+                    print("  (oficina desligada: veja docs/OFICINA.md)")
+                elif line == "/prs":
+                    print("\n".join("  " + r.describe() for r in akemi.oficina.history()[-10:]) or "  (nenhum ainda)")
+                else:
+                    print("  (trabalhando... isso leva uns minutos; ela avisa quando terminar)")
+                    akemi._tasks.append(asyncio.create_task(akemi.open_pr(line[4:])))
             elif line == "/voz":
                 vid = akemi.senses.voice_id
                 if vid is not None:
