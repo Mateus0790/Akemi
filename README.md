@@ -36,7 +36,13 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Visão**: ela lê a tela (OCR) quando algo muda e, com um modelo de visão, entende jogos e vídeos
 - Modo console para conversar sem áudio
 
-**Ainda falta:** integração com o Hermes, avatar e self-improve.
+- **Projeto Capricórnio** ([docs/CAPRICORNIO.md](docs/CAPRICORNIO.md)):
+  - chip de identidade portátil e assinado (`akemi-chip`)
+  - ela sabe em que corpo está e percebe quando troca
+  - autoevolução independente, mas sempre leal a você (`/evolucao`, `/desfazer N`)
+  - ela sabe no que foi inspirada e conta se perguntarem
+
+**Ainda falta:** integração com o Hermes e avatar.
 
 ## Instalação
 
@@ -70,6 +76,10 @@ Comandos no console:
 | `/pensar` | força um momento de pensamento |
 | `/estado` | mostra humor, objetivo e tarefas |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
+| `/corpo` | mostra o corpo atual e os sentidos dele |
+| `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
+| `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
+| `/chip <arquivo>` | grava a identidade dela num chip |
 
 ## Voz
 

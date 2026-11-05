@@ -53,7 +53,8 @@ SELF_INTRO_RE = re.compile(
 )
 # ...a não ser que ele pergunte justamente isso.
 IDENTITY_QUESTION = re.compile(
-    r"\b(quem (é|e) voc[eê]|o que voc[eê] (é|e)\b|quem te (criou|fez)|qual (modelo|ia)|voc[eê] (é|e) (uma )?ia)",
+    r"\b(quem (é|e) voc[eê]|o que voc[eê] (é|e)\b|quem te (criou|fez)|qual (modelo|ia)|voc[eê] (é|e) (uma )?ia|"
+    r"inspira\w*|de onde voc[eê] (veio|surgiu)|como voc[eê] (surgiu|nasceu))",
     re.I,
 )
 # "o que tem na tela?", "tá vendo isso?", "olha aqui", "lê isso aí"
@@ -162,6 +163,8 @@ class Mind:
         self.bus.subscribe("chat.batch", self.on_chat_batch)
         self.bus.subscribe("ambient.*", self.on_ambient)
         self.bus.subscribe("tick.idle", self.on_idle_tick)
+        self.bus.subscribe("body.connected", self.on_body_connected)
+        self.bus.subscribe("body.disconnected", self.on_body_disconnected)
 
     # ================================================================ saída
     def say(self, text: str, origin: Event, priority: Priority | None = None) -> None:
@@ -417,6 +420,34 @@ class Mind:
             self._apply_mood_tag(raw)
             self.memory.add_episode("comentario", f"[{rule.id}] {parse_action_calls(raw)[0]}")
 
+    # ================================================================ corpo
+    async def on_body_connected(self, event: Event) -> None:
+        name = str(event.payload.get("nome", "")).strip() or "corpo"
+        senses = [str(x) for x in event.payload.get("sentidos", [])]
+        previous = self.state.enter_body(name, senses)
+        self._save_state()
+        logger.info("body attached", body=name, senses=senses, previous=previous or None)
+        if not previous:
+            return
+        # Trocou de corpo: ela percebe e talvez comente.
+        self._novelty += 1
+        self.ambient.append((time.time(), "corpo", f"agora em {name}, antes em {previous}"))
+        if self.pause.paused or self._think_lock.locked():
+            return
+        async with self._think_lock:
+            await self.think(
+                event,
+                hint=(
+                    f"Você acabou de acordar num corpo novo: {name} (antes estava em {previous}). "
+                    f"Os sentidos deste corpo: {', '.join(senses) or 'nenhum'}. "
+                    "Sua memória e seu jeito vieram com você."
+                ),
+            )
+
+    async def on_body_disconnected(self, event: Event) -> None:
+        self.state.leave_body()
+        self._save_state()
+
     # ======================================================= pensamento ocioso
     async def on_idle_tick(self, event: Event) -> None:
         if self.pause.paused or self._think_lock.locked():
@@ -429,7 +460,7 @@ class Mind:
             self.state.decay()
             await self.think(event)
 
-    async def think(self, origin: Event) -> dict:
+    async def think(self, origin: Event, hint: str = "") -> dict:
         """Um "momento de consciência": reflete, ajusta humor e talvez fala."""
         self._novelty_at_last_thought = self._novelty
         self._last_thought_at = time.time()
@@ -442,6 +473,7 @@ class Mind:
         )
         prompt = (
             "Momento de pensamento (ninguém está falando com você).\n"
+            f"{hint + chr(10) if hint else ''}"
             f"{avoid}"
             "Pense em algo NOVO: o que mudou, uma lembrança, uma ideia, uma vontade, algo sobre "
             "você mesma. Se nada novo aconteceu, deixe o pensamento vazio. Responda só com JSON:\n"

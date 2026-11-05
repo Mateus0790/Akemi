@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     owner_name: str = "Mateus"
 
+    # --- Identidade portátil, corpos e autoevolução ---
+    body_name: str = ""  # nome deste corpo (vazio = nome do computador)
+    chip_key: str = ""  # chave para assinar/verificar chips (akemi-chip)
+    self_improve_interval_s: float = 21600.0  # revisão automática (0 = só com /evoluir)
+    self_improve_autonomous: bool = True  # muda sozinha (False = espera /aprovar)
+    self_improve_min_conversations: int = 6  # conversas novas para valer a revisão
+
     # --- Comportamento autônomo ---
     idle_think_interval_s: float = 180.0
     min_seconds_between_unprompted_speech: float = 60.0

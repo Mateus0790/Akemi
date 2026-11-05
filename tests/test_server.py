@@ -321,3 +321,40 @@ async def test_body_refuses_actions_outside_the_pc_list():
     await body._run_action({"id": 2, "name": "abrir_programa", "args": "nao-e-dict"})
     assert pc.launched == []
     assert [(t, f["status"]) for t, f in sent] == [("action_result", "denied"), ("action_result", "denied")]
+
+
+@pytest.mark.asyncio
+async def test_body_announces_itself_and_owner_reviews_evolution(core):
+    tts = RecordingTTS()
+    body = Body(Settings(_env_file=None, akemi_token=TOKEN, body_name="notebook"), core.url, TOKEN, tts)
+    await body.start()
+    link = asyncio.create_task(body.connect_forever())
+    try:
+        await asyncio.wait_for(body.connected.wait(), 3)
+        await until(lambda: core.akemi.state.body == "notebook" and core.akemi.state.body_connected)
+        async with httpx.AsyncClient() as client:
+            health = (await client.get(core.http + "/saude")).json()
+        assert health["corpo"] == "notebook"
+
+        prop = core.akemi.evolution.propose("traco", text="Comenta de leve quando ele joga até tarde.")
+        replies = []
+        orig = body.handle
+
+        async def spy(msg):
+            if msg["type"] == "evolucao":
+                replies.append(msg["texto"])
+            await orig(msg)
+
+        body.handle = spy
+        await body.send("evolucao", acao="aprovar", id=prop.id)
+        await until(lambda: replies)
+        assert "aprovada" in replies[0]
+        assert "joga até tarde" in core.akemi.mind.persona.system_prompt()
+        await body.send("evolucao", acao="apagar_tudo")
+        await until(lambda: len(replies) == 2)
+        assert replies[1] == "ação inválida"
+    finally:
+        link.cancel()
+        await asyncio.gather(link, return_exceptions=True)
+        await body.stop()
+    await until(lambda: not core.akemi.state.body_connected)

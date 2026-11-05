@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import socket
+from pathlib import Path
 
 import structlog
 
@@ -12,6 +14,7 @@ from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import LLMProvider, build_provider
+from akemi.brain.self_improve import Evolution, Proposal
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
 from akemi.core.config import Settings
@@ -24,6 +27,31 @@ from akemi.storage.memory import Memory
 from akemi.tts.base import ConsoleTTS, Speaker, TTSEngine
 
 logger = structlog.get_logger()
+
+
+def resolve_persona_file(settings: Settings) -> Path:
+    """Uma persona vinda de um chip (``data/persona.yaml``) vale mais que a do repositório."""
+    installed = settings.data_dir / "persona.yaml"
+    return installed if installed.exists() else settings.persona_file
+
+
+def default_body_name(settings: Settings) -> str:
+    return (settings.body_name or socket.gethostname() or "corpo").strip()[:40]
+
+
+def local_senses(settings: Settings, tts: TTSEngine, desktop_actions: bool) -> list[str]:
+    senses = []
+    if not isinstance(tts, ConsoleTTS):
+        senses.append("voz")
+    if settings.mic_enabled:
+        senses.append("microfone")
+    if settings.screen_enabled:
+        senses.append("tela")
+    if settings.system_audio_enabled:
+        senses.append("audio_pc")
+    if desktop_actions:
+        senses.append("acoes")
+    return senses
 
 
 def build_tts(settings: Settings) -> TTSEngine:
@@ -99,10 +127,21 @@ class Akemi:
 
             register_desktop_actions(self.actions)
 
+        self.persist = persist
+        self.desktop_actions = desktop_actions
+        # Persona base (yaml) + o que ela aprendeu e você aprovou.
+        self.base_persona = Persona.load(resolve_persona_file(settings), owner=settings.owner_name)
+        self.evolution = Evolution(
+            data / "evolucao.json" if persist else None, self.moderator,
+            owner=settings.owner_name, autonomous=settings.self_improve_autonomous,
+        )
+        # Só o modo local é "corpo" do próprio núcleo; o servidor anuncia o corpo remoto.
+        self.local_body = True
+
         self.mind = Mind(
             self.bus,
             self.models,
-            Persona.load(settings.persona_file, owner=settings.owner_name),
+            self.evolution.apply(self.base_persona),
             self.state,
             self.memory,
             self.actions,
@@ -143,6 +182,55 @@ class Akemi:
         """Algo percebido (tela/áudio). Sempre PUBLIC: pode conter texto de terceiros."""
         self.bus.publish(Event(f"ambient.{kind}", {"text": text}, source=kind, trust=Trust.PUBLIC, priority=Priority.LOW))
 
+    # ------------------------------------------------------- autoevolução
+    def _refresh_persona(self) -> None:
+        self.mind.persona = self.evolution.apply(self.base_persona)
+
+    async def evolve(self, force: bool = False) -> list[Proposal]:
+        """Ela relê as conversas e muda a si mesma (ou propõe, sem modo autônomo)."""
+        made = await self.evolution.reflect(
+            self.models.fast, self.models.fast_model, self.memory, self.mind.persona,
+            min_conversations=self.settings.self_improve_min_conversations, force=force,
+        )
+        if not made:
+            return made
+        if self.evolution.autonomous:
+            self._refresh_persona()
+        if not force and not self.pause.paused:
+            self.bus.publish(Event(
+                "speech.say",
+                {"text": self._evolution_news(made), "origin": "evolucao"},
+                source="evolucao", trust=Trust.SYSTEM, priority=Priority.LOW,
+            ))
+        return made
+
+    def _evolution_news(self, made: list[Proposal]) -> str:
+        """O que ela conta ao dono depois de mudar (lealdade: nada escondido)."""
+        if not self.evolution.autonomous:
+            return "Pensei numas mudanças em mim. Dá uma olhada quando puder."
+        first = made[0]
+        what = f": {first.text}" if first.kind != "exemplo" else " no jeito de te responder"
+        more = " E mais uma coisinha, tá no histórico." if len(made) > 1 else ""
+        return f"Mudei uma coisa em mim{what}.{more} Se não curtir, é só desfazer."
+
+    def decide_evolution(self, action: str, pid: int) -> Proposal:
+        """``aprovar`` | ``rejeitar`` | ``desfazer``. Só o dono chama isto."""
+        fn = {"aprovar": self.evolution.approve, "rejeitar": self.evolution.reject,
+              "desfazer": self.evolution.revert}.get(action)
+        if fn is None:
+            raise ValueError(f"ação desconhecida: {action}")
+        prop = fn(pid)
+        self._refresh_persona()
+        return prop
+
+    async def _evolution_ticker(self) -> None:
+        while True:
+            await asyncio.sleep(self.settings.self_improve_interval_s)
+            try:
+                await self.evolve()
+            except Exception as exc:  # nunca derruba a Akemi
+                logger.warning("evolution round failed", error=str(exc))
+
     # ----------------------------------------------------------- ciclo
     async def _idle_ticker(self) -> None:
         while True:
@@ -163,6 +251,8 @@ class Akemi:
         self._tasks.append(asyncio.create_task(self.chat.run(), name="chat-batcher"))
         if self.settings.idle_think_interval_s > 0:
             self._tasks.append(asyncio.create_task(self._idle_ticker(), name="idle"))
+        if self.persist and self.settings.self_improve_interval_s > 0:
+            self._tasks.append(asyncio.create_task(self._evolution_ticker(), name="evolution"))
         if self.settings.twitch_channel:
             from akemi.live.twitch import TwitchChat
 
@@ -177,6 +267,13 @@ class Akemi:
             self.mind.look = lambda: screen.step(force=True, publish=False)
         if self.senses.voice_input is not None:
             self.bus.subscribe("speech.finished", self._on_speech_finished)
+        if self.local_body:
+            self.bus.publish(Event(
+                "body.connected",
+                {"nome": default_body_name(self.settings),
+                 "sentidos": local_senses(self.settings, self.speaker.engine, self.desktop_actions)},
+                source="local", trust=Trust.SYSTEM,
+            ))
         logger.info(
             "akemi started",
             fast=self.models.fast_model,

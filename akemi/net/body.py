@@ -11,7 +11,13 @@ No terminal do corpo:
     qualquer texto      fala com ela (como dono)
     /olhar              faz ela olhar a tela agora (com --tela)
     /pausar | /voltar   pausa/retoma a autonomia dela
+    /evolucao           mostra o que ela mudou em si (e o que está pendente)
+    /evoluir            pede para ela revisar as conversas agora
+    /aprovar N | /rejeitar N | /desfazer N
     /sair
+
+Ao conectar, o corpo se apresenta (BODY_NAME, ou o nome do PC) com os
+sentidos que tem. Se for um corpo diferente do anterior, ela percebe a troca.
 """
 
 from __future__ import annotations
@@ -141,6 +147,9 @@ class Body:
             register_desktop_actions(actions)
         self.actions = actions
         self._action_tasks: set[asyncio.Task] = set()
+        from akemi.core.orchestrator import default_body_name
+
+        self.name = default_body_name(settings)
         self.bus = EventBus()
         self.pause = PauseSwitch()
         self.voice = BodyVoice(engine, self._on_spoken)
@@ -153,6 +162,11 @@ class Body:
         self.bus.subscribe("owner.message", self._fwd_owner_message)
         self.bus.subscribe("owner.speech_started", self._fwd_speech_started)
         self.bus.subscribe("ambient.*", self._fwd_ambient)
+
+    def sense_list(self) -> list[str]:
+        from akemi.core.orchestrator import local_senses
+
+        return local_senses(self.settings, self.voice.engine, desktop_actions=any(self.actions.get(n) for n in PC_ACTIONS))
 
     # -------------------------------------------------------------- envio
     async def send(self, type_: str, **fields: Any) -> bool:
@@ -202,6 +216,8 @@ class Body:
             task = asyncio.create_task(self._run_action(msg))
             self._action_tasks.add(task)
             task.add_done_callback(self._action_tasks.discard)
+        elif kind == "evolucao":
+            print(f"\n{msg.get('texto', '')}")
         elif kind in ("welcome", "paused"):
             if msg.get("paused"):
                 self.pause.pause("núcleo")
@@ -225,7 +241,10 @@ class Body:
 
     async def session(self, conn: Any) -> None:
         """Uma conexão: autentica e processa mensagens até cair."""
-        await conn.send(proto.encode("hello", token=self.token, version=proto.VERSION))
+        await conn.send(proto.encode(
+            "hello", token=self.token, version=proto.VERSION,
+            corpo={"nome": self.name, "sentidos": self.sense_list()},
+        ))
         self.conn = conn
         self.connected.set()
         try:
@@ -308,6 +327,14 @@ async def console(body: Body) -> None:
                 continue
             seen = await body.senses.screen.step(force=True)
             print(f"  (viu: {seen})" if seen else "  (nada legível na tela)")
+        elif line in ("/evolucao", "/evoluir"):
+            await body.send("evolucao", acao="listar" if line == "/evolucao" else "evoluir")
+        elif line.split()[0] in ("/aprovar", "/rejeitar", "/desfazer"):
+            cmd, _, arg = line.partition(" ")
+            if not arg.strip().lstrip("#").isdigit():
+                print(f"  uso: {cmd} <número>")
+                continue
+            await body.send("evolucao", acao=cmd[1:], id=int(arg.strip().lstrip("#")))
         elif line == "/pausar":
             await body.send("pause")
         elif line == "/voltar":
