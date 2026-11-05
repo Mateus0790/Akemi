@@ -39,6 +39,7 @@ def register_builtin_actions(
     @registry.register("mudar_objetivo", "muda seu objetivo atual", params={"objetivo": "novo objetivo"})
     def mudar_objetivo(objetivo: str) -> str:
         state.current_goal = objetivo.strip()
+        state.goal_is_hers = False
         state.touch()
         return "ok"
 

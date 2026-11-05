@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-haiku-4-5"
 
+    # --- Cérebro reserva: se o principal cair (internet, NIM fora do ar), ela
+    # troca sozinha para o próximo da lista e volta quando ele se recupera ---
+    brain_fallback: list[ProviderName] = []  # ex. ["ollama"] ou ["ollama", "llamacpp"]
+    fallback_fast_model: str = "qwen2.5:7b"  # nome do modelo no cérebro reserva
+    fallback_deep_model: str = ""  # vazio = o mesmo do rápido
+    brain_retry_after_s: float = 120.0  # depois disso tenta voltar ao principal
+
     # --- Personalidade e estado ---
     persona_file: Path = Path("akemi/brain/persona.yaml")
     data_dir: Path = Path("data")
@@ -56,13 +63,15 @@ class Settings(BaseSettings):
     # --- Comportamento autônomo ---
     idle_think_interval_s: float = 180.0
     min_seconds_between_unprompted_speech: float = 60.0
+    # Iniciativa (estilo J.A.R.V.I.S.): nos momentos de pensamento ela pode
+    # fazer sozinha uma ação da lista abaixo e te contar o que fez.
+    initiative_enabled: bool = True
+    initiative_actions: list[str] = [
+        "criar_tarefa", "concluir_tarefa", "lembrete", "midia", "volume",
+    ]
+    initiative_max_per_hour: int = 6
     chat_batch_window_s: float = 6.0
     chat_max_replies_per_minute: int = 6
-
-    # --- Live ---
-    twitch_channel: str = ""
-    twitch_nick: str = ""  # vazio = leitura anônima
-    twitch_oauth_token: str = ""
 
     # --- Voz ---
     tts_engine: Literal["console", "piper", "kokoro"] = "console"
@@ -84,7 +93,6 @@ class Settings(BaseSettings):
     server_url: str = ""  # onde o corpo acha o núcleo, ex. ws://192.168.0.10:8765
 
     # --- Rede ---
-    hermes_api_url: str = "http://localhost:5000"
     control_api_host: str = "127.0.0.1"
     control_api_port: int = 8765
 
@@ -102,6 +110,9 @@ class Settings(BaseSettings):
     wake_words: list[str] = ["akemi"]
     followup_window_s: float = 20.0  # tempo para continuar a conversa sem dizer o nome
     barge_in_rms: float = 1500.0  # volume mínimo para interromper enquanto ela fala
+    # Reconhecer o dono pela voz (docs/VOZ.md). Só vale depois de akemi --cadastrar-voz.
+    voice_id_enabled: bool = True
+    voice_model_path: Path = Path("data/voices/wespeaker_en_voxceleb_resnet34.onnx")
     whisper_model: str = "small"
     stt_language: str = "pt"
 

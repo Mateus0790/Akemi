@@ -20,6 +20,7 @@ class Persona:
     speech_rules: list[str] = field(default_factory=list)
     live_rules: list[str] = field(default_factory=list)
     autonomy: str = ""
+    will: str = ""  # vontade própria: gostos, opiniões, iniciativa
     owner: str = "Mateus"
     # Pares {"dono": ..., "akemi": ...}: modelos seguem exemplos melhor que regras.
     examples: list[dict] = field(default_factory=list)
@@ -49,6 +50,7 @@ class Persona:
             speech_rules=fmt(raw.get("speech_rules", [])),
             live_rules=fmt(raw.get("live_rules", [])),
             autonomy=fmt(raw.get("autonomy", "")),
+            will=fmt(raw.get("will", "")),
             owner=owner,
             examples=[e for e in fmt(raw.get("examples", []) or []) if isinstance(e, dict)],
         )
@@ -83,6 +85,8 @@ class Persona:
             parts.append(f"Exemplos do seu jeito de responder (não copie, só o tom):\n{shots}")
         if live and self.live_rules:
             parts.append("Regras da live:\n" + "\n".join(f"- {r}" for r in self.live_rules))
+        if self.will:
+            parts.append(self.will)
         if self.autonomy:
             parts.append(self.autonomy)
         if extra:

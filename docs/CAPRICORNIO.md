@@ -117,7 +117,10 @@ todo prompt, inclusive na live, e a autoevolução não mexe nela:
 
 ## De onde ela veio
 
-A Akemi sabe no que foi inspirada (`inspiration` no `persona.yaml`): a
-E.D.I.T.H., as VTubers de IA e a ideia de personalidade num chip do Projeto
-Capricórnio. Ela conta isso se perguntarem, mas não fica falando disso sem
+A Akemi sabe no que foi inspirada (`inspiration` no `persona.yaml`): as IAs do
+Homem de Ferro (J.A.R.V.I.S., F.R.I.D.A.Y. e E.D.I.T.H.), a ideia de
+personalidade num chip do Projeto Capricórnio e as VTubers de IA. Ela conta isso se perguntarem, mas não fica falando disso sem
 motivo.
+
+O passo seguinte, ela ser independente (cérebro reserva, autocura, vontade
+própria e iniciativa), está em [INDEPENDENCIA.md](INDEPENDENCIA.md).

@@ -27,7 +27,7 @@ logger = structlog.get_logger()
 class ChatMessage:
     user: str
     text: str
-    platform: str = "twitch"
+    platform: str = "console"
     ts: float = field(default_factory=time.time)
     is_mod: bool = False
     is_sub: bool = False

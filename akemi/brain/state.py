@@ -21,6 +21,9 @@ logger = structlog.get_logger()
 
 MOODS = ("neutra", "animada", "curiosa", "focada", "entediada", "irritadinha", "sonolenta", "orgulhosa")
 MAX_THOUGHT_CHARS = 240
+MAX_WILL_CHARS = 160
+MAX_INTERESTS = 8
+MAX_OPINIONS = 8
 SENSE_LABEL = {
     "voz": "voz",
     "microfone": "ouve o dono",
@@ -70,6 +73,11 @@ class InnerState:
     body: str = ""
     senses: list[str] = field(default_factory=list)
     body_connected: bool = False
+    # Vontade própria: o que ela foi formando sozinha (vai junto no chip).
+    interests: list[str] = field(default_factory=list)
+    opinions: list[str] = field(default_factory=list)
+    desire: str = ""  # o que ela está com vontade de fazer ou conversar agora
+    goal_is_hers: bool = False  # o objetivo atual foi ela que escolheu
 
     # ------------------------------------------------------------------ humor
     def set_mood(self, mood: str, intensity: float = 0.6) -> None:
@@ -127,6 +135,41 @@ class InnerState:
     def touch(self) -> None:
         self.last_updated_at = time.time()
 
+    # --------------------------------------------------------- vontade própria
+    @staticmethod
+    def _clip(text: str) -> str:
+        return " ".join(str(text or "").split())[:MAX_WILL_CHARS]
+
+    def add_interest(self, text: str) -> bool:
+        text = self._clip(text)
+        if not text or is_repeated(text, self.interests, threshold=0.7):
+            return False
+        self.interests = [*self.interests, text][-MAX_INTERESTS:]
+        self.touch()
+        return True
+
+    def add_opinion(self, text: str) -> bool:
+        """Opinião nova. Se for sobre o mesmo assunto de uma antiga, substitui (ela muda de ideia)."""
+        text = self._clip(text)
+        if not text:
+            return False
+        kept = [o for o in self.opinions if not is_repeated(text, [o])]
+        self.opinions = [*kept, text][-MAX_OPINIONS:]
+        self.touch()
+        return True
+
+    def set_desire(self, text: str) -> None:
+        self.desire = self._clip(text)
+        self.touch()
+
+    def set_own_goal(self, text: str) -> bool:
+        text = self._clip(text)
+        if not text or text == self.current_goal:
+            return False
+        self.current_goal, self.goal_is_hers = text, True
+        self.touch()
+        return True
+
     # ------------------------------------------------------------------ corpo
     def enter_body(self, name: str, senses: list[str]) -> str:
         """Liga a um corpo. Devolve o nome do corpo anterior se ela trocou de corpo."""
@@ -144,8 +187,14 @@ class InnerState:
         now = now or time.time()
         lines = [
             f"Seu humor agora: {self.mood} (intensidade {self.mood_intensity:.1f}).",
-            f"Seu objetivo atual: {self.current_goal}.",
+            f"Seu objetivo atual{' (escolhido por você)' if self.goal_is_hers else ''}: {self.current_goal}.",
         ]
+        if self.interests:
+            lines.append("Coisas que te interessam: " + "; ".join(self.interests[-5:]) + ".")
+        if self.opinions:
+            lines.append("Opiniões suas: " + "; ".join(self.opinions[-5:]) + ".")
+        if self.desire:
+            lines.append(f"O que você está com vontade agora: {self.desire}.")
         if self.body:
             if self.body_connected:
                 senses = ", ".join(SENSE_LABEL.get(x, x) for x in self.senses) or "nenhum sentido"

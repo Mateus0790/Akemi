@@ -31,7 +31,10 @@ class Senses:
         pause: PauseSwitch,
         *,
         vision_fallback: LLMProvider | None = None,
+        on_voice_problem: Callable[[str], None] | None = None,
     ) -> None:
+        self.on_voice_problem = on_voice_problem
+        self.voice_id = None
         self.bus = bus
         self.settings = settings
         self.speech_state = speech_state
@@ -122,6 +125,14 @@ class Senses:
         device = s.mic_device or None
         if device is not None and device.isdigit():
             device = int(device)
+        if s.voice_id_enabled:
+            from akemi.audio.voice_id import load_voice_id
+
+            self.voice_id = load_voice_id(
+                s.data_dir, s.voice_model_path, inherit_s=s.followup_window_s, on_problem=self.on_voice_problem,
+            )
+            if self.voice_id is not None:
+                logger.info("voice recognition on", ready=self.voice_id.ready)
         self.voice_input = OwnerVoiceInput(
             self.bus, stt.transcribe, VAD(s.vad_aggressiveness).is_speech,
             self.speech_state, self.pause,
@@ -129,6 +140,7 @@ class Senses:
             wake_words=s.wake_words,
             followup_window_s=s.followup_window_s,
             barge_in_rms=s.barge_in_rms,
+            voice_id=self.voice_id,
         )
         self._mic = MicCapture(device)
         self._mic.start(self._frame_bridge("mic", self.voice_input.feed))

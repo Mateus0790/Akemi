@@ -1,6 +1,5 @@
 from akemi.core.events import EventBus, Trust
 from akemi.live.chat import ChatBatcher, ChatMessage
-from akemi.live.twitch import parse_irc, to_chat_message
 from akemi.safety.moderation import Moderator
 
 
@@ -42,17 +41,3 @@ def test_batcher_rate_limit_and_user_cooldown():
     b2.add(ChatMessage("x", "akemi outra pergunta?"))
     assert b2.flush(now=1005) is None  # cooldown por usuário
 
-
-def test_parse_twitch_privmsg():
-    raw = (
-        "@badges=subscriber/1;display-name=Fulano;first-msg=1;mod=0;subscriber=1 "
-        ":fulano!fulano@fulano.tmi.twitch.tv PRIVMSG #canal :oi akemi; tudo bem?\r\n"
-    )
-    msg = to_chat_message(parse_irc(raw))
-    assert msg.user == "Fulano" and msg.text == "oi akemi; tudo bem?"
-    assert msg.first_msg and msg.is_sub and not msg.is_mod
-
-
-def test_parse_ping():
-    irc = parse_irc("PING :tmi.twitch.tv")
-    assert irc.command == "PING" and irc.params == ["tmi.twitch.tv"]

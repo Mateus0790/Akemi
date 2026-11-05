@@ -162,6 +162,7 @@ class Body:
         self.bus.subscribe("owner.message", self._fwd_owner_message)
         self.bus.subscribe("owner.speech_started", self._fwd_speech_started)
         self.bus.subscribe("ambient.*", self._fwd_ambient)
+        self.bus.subscribe("voice.guest", self._fwd_guest)
 
     def sense_list(self) -> list[str]:
         from akemi.core.orchestrator import local_senses
@@ -191,6 +192,11 @@ class Body:
     async def _fwd_speech_started(self, event: Event) -> None:
         await self.voice.stop_all()  # para na hora, sem esperar a rede
         await self.send("owner_speech_started")
+
+    async def _fwd_guest(self, event: Event) -> None:
+        # A voz não é a do dono: vai como visita, nunca como owner_message.
+        await self.voice.stop_all()
+        await self.send("guest_message", text=event.text, quem=str(event.payload.get("quem", "outro")))
 
     async def _fwd_ambient(self, event: Event) -> None:
         await self.send("ambient", kind=event.kind.split(".", 1)[1], text=event.text)

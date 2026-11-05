@@ -6,6 +6,7 @@ Tudo o que faz ela ser *ela* (e não o modelo de linguagem que roda por baixo):
 - ``evolucao.json`` — o que ela aprendeu e você aprovou
 - ``state.json``    — humor, objetivo, tarefas, pensamentos, último corpo
 - ``memory.sqlite3`` — conversas e fatos
+- ``voz.json``      — a impressão da voz do dono (opcional, sem áudio)
 
 Com o chip dá para levar a Akemi para outro núcleo (outro PC, outro servidor)
 ou trocar o modelo (NIM, Ollama, Anthropic...) sem que ela perca quem é::
@@ -44,7 +45,8 @@ FORMAT = "akemi-chip"
 VERSION = 1
 MANIFEST = "manifest.json"
 PERSONA, EVOLUTION, STATE, MEMORY = "persona.yaml", "evolucao.json", "state.json", "memory.sqlite3"
-FILES = (PERSONA, EVOLUTION, STATE, MEMORY)  # nomes fixos: nada de caminhos vindos do zip
+VOICE = "voz.json"  # impressão da voz do dono (sem áudio), se cadastrada
+FILES = (PERSONA, EVOLUTION, STATE, MEMORY, VOICE)  # nomes fixos: nada de caminhos vindos do zip
 MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_SMALL_BYTES = 2 * 1024 * 1024  # persona, estado e evolução são pequenos
 
@@ -113,7 +115,7 @@ def export_chip(
         if not persona_src.exists():
             persona_src = DEFAULT_PERSONA_PATH  # mesma regra do Persona.load
         staged[PERSONA] = Path(persona_src)
-        for name in (EVOLUTION, STATE):
+        for name in (EVOLUTION, STATE, VOICE):
             if (data_dir / name).exists():
                 staged[name] = data_dir / name
 
@@ -195,6 +197,13 @@ def _validate_contents(files: dict[str, Path]) -> None:
             Evolution().load_dict(json.loads(files[EVOLUTION].read_text(encoding="utf-8")))
         except (ValueError, TypeError, EvolutionError) as exc:
             raise ChipError(f"evolução inválida: {exc}") from exc
+    if VOICE in files:
+        from akemi.audio.voice_id import VoiceError, VoicePrint
+
+        try:
+            VoicePrint.from_dict(json.loads(files[VOICE].read_text(encoding="utf-8")))
+        except (ValueError, VoiceError) as exc:
+            raise ChipError(f"voz inválida: {exc}") from exc
     if MEMORY in files:
         try:
             db = sqlite3.connect(f"file:{files[MEMORY]}?mode=ro", uri=True)

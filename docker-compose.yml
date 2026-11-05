@@ -26,8 +26,6 @@ services:
       # Senha entre o servidor e o PC (a mesma no .env do PC). Gere uma com:
       #   python -c "import secrets; print(secrets.token_urlsafe(24))"
       AKEMI_TOKEN: TROQUE-por-um-segredo-longo
-      # Chat da Twitch (vazio = desligado)
-      TWITCH_CHANNEL: ""
       IDLE_THINK_INTERVAL_S: "180"
       LOG_LEVEL: INFO
     x-casaos:

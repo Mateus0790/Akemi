@@ -1,0 +1,24 @@
+name: akemi_app
+description: "A mesma Akemi do PC, no celular."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  web_socket_channel: ^3.0.1
+  shared_preferences: ^2.3.2
+  flutter_tts: ^4.2.0
+  speech_to_text: ^7.0.0
+  flutter_local_notifications: ^18.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
