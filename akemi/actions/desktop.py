@@ -38,6 +38,29 @@ def _norm(text: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9 ]", " ", normalize(text)).split())
 
 
+# Sites pedidos pelo nome falado: o modelo às vezes manda o nome, não o endereço.
+KNOWN_SITES = {
+    "whatsapp": "https://web.whatsapp.com",
+    "whatsapp web": "https://web.whatsapp.com",
+    "zap": "https://web.whatsapp.com",
+    "youtube": "https://www.youtube.com",
+    "gmail": "https://mail.google.com",
+    "instagram": "https://www.instagram.com",
+    "facebook": "https://www.facebook.com",
+    "netflix": "https://www.netflix.com",
+    "tiktok": "https://www.tiktok.com",
+    "twitch": "https://www.twitch.tv",
+    "chatgpt": "https://chatgpt.com",
+    "github": "https://github.com",
+}
+
+
+def site_url(name: str) -> str | None:
+    """Endereço de um site conhecido: "o WhatsApp Web" -> "https://web.whatsapp.com"."""
+    q = re.sub(r"^(o|a|meu|minha|site do|site da|site)\s+", "", _norm(name))
+    return KNOWN_SITES.get(q)
+
+
 def _acronym_variants(name: str) -> set[str]:
     """Siglas faladas: "visual studio code" -> {"vsc", "vs code", "vscode"}."""
     words = name.split()
@@ -246,12 +269,27 @@ def register_desktop_actions(
                        example=('abre o Spotify', '[[acao:abrir_programa {"nome": "Spotify"}]]'),
                        params={"nome": "nome do programa, ex. Discord, Spotify, VS Code"})
     async def abrir_programa(nome: str) -> str:
+        site = site_url(nome)
+        if site and "web" in _norm(nome).split():  # "WhatsApp Web" é o site, mesmo com o app instalado
+            open_url(site)
+            return f"Abrindo {nome}."
         # Get-StartApps leva ~1 s na primeira vez: fora do loop de eventos.
-        app = await asyncio.to_thread(menu.open, nome)
+        try:
+            app = await asyncio.to_thread(menu.open, nome)
+        except ValueError:
+            if site is None:
+                raise
+            open_url(site)  # sem o programa instalado, o site resolve
+            return f"Abrindo {nome}."
         return f"Abrindo {app.name}."
 
-    @registry.register("abrir_site", "abre um site no navegador", params={"url": "endereço http(s)"})
+    @registry.register("abrir_site", "abre um site no navegador",
+                       example=('abre o WhatsApp Web', '[[acao:abrir_site {"url": "web.whatsapp.com"}]]'),
+                       params={"url": "endereço do site, ex. web.whatsapp.com"})
     def abrir_site(url: str) -> str:
+        url = site_url(url) or url.strip()
+        if " " in url:
+            raise ValueError(f"não sei o endereço de {url}")
         if "://" not in url:
             url = "https://" + url
         if urlparse(url).scheme not in ("http", "https"):

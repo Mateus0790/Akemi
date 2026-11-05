@@ -89,6 +89,53 @@ async def test_media_and_volume_keys():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("url", ["WhatsApp Web", "o whatsapp web", "web.whatsapp.com", "https://web.whatsapp.com"])
+async def test_open_site_by_name_or_address(url):
+    reg, *_, urls = make()
+    r = await run(reg, "abrir_site", url=url)
+    assert r.status == "executed"
+    assert urls == ["https://web.whatsapp.com"]
+
+
+@pytest.mark.asyncio
+async def test_open_site_rejects_unknown_name_and_bad_scheme():
+    reg, *_, urls = make()
+    for url in ("site inventado", "file:///c:/x"):
+        r = await run(reg, "abrir_site", url=url)
+        assert r.status == "error"
+    assert urls == []
+
+
+@pytest.mark.asyncio
+async def test_open_program_falls_back_to_known_site():
+    reg, launched, *_, urls = make()
+    r = await run(reg, "abrir_programa", nome="WhatsApp Web")
+    assert r.status == "executed"
+    assert urls == ["https://web.whatsapp.com"]
+    assert launched == []
+
+
+@pytest.mark.asyncio
+async def test_web_name_opens_site_even_with_app_installed():
+    apps = APPS + [StartApp("WhatsApp", "5319275A.WhatsAppDesktop")]
+    launched, urls = [], []
+    reg = ActionRegistry()
+    register_desktop_actions(reg, start_menu=StartMenu(loader=lambda: apps, launcher=launched.append), open_url=urls.append)
+    await run(reg, "abrir_programa", nome="WhatsApp Web")
+    assert urls == ["https://web.whatsapp.com"] and launched == []
+    await run(reg, "abrir_programa", nome="WhatsApp")
+    assert [a.name for a in launched] == ["WhatsApp"] and len(urls) == 1
+
+
+@pytest.mark.asyncio
+async def test_unknown_program_still_fails():
+    reg, *_, urls = make()
+    r = await run(reg, "abrir_programa", nome="photoshop")
+    assert r.status == "error"
+    assert urls == []
+
+
+@pytest.mark.asyncio
 async def test_search():
     reg, *_, urls = make()
     await run(reg, "pesquisar", termo="receita de bolo", onde="google")
