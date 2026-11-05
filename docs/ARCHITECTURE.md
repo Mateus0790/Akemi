@@ -2,7 +2,7 @@
 
 A ideia: sair do modelo "pergunta → resposta" (chatbot) para um **agente contínuo**
 com estado interno, que percebe o que acontece, decide sozinho quando agir e
-mantém tarefas em segundo plano — estilo E.D.I.T.H., com a presença de uma
+mantém tarefas em segundo plano — estilo J.A.R.V.I.S. e E.D.I.T.H., com a presença de uma
 VTuber de IA.
 
 ```

@@ -271,6 +271,7 @@ class AkemiServer:
             "corpo": self.body_name if self.link.connected else "",
             "pausada": self.akemi.pause.paused,
             "humor": state.mood,
+            "autocura": self.akemi.health_report(),
         }
 
     def process_request(self, conn: Any, request: Any):
@@ -318,6 +319,7 @@ def build(settings: Settings, **akemi_kwargs) -> AkemiServer:
     akemi = Akemi(settings, tts=RemoteVoice(link), **akemi_kwargs)
     akemi.local_body = False  # o corpo de verdade se anuncia no hello
     register_remote_actions(akemi.actions, link)
+    akemi.allow_initiative()  # midia/volume só existem depois do registro remoto
     return AkemiServer(akemi, link, settings.akemi_token)
 
 

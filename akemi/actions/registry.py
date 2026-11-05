@@ -91,6 +91,16 @@ class ActionRegistry:
         self._actions: dict[str, Action] = {}
         self._pending: PendingConfirmation | None = None
         self.confirm_timeout_s = confirm_timeout_s
+        # Iniciativa: ações que ela pode fazer sozinha, sem o dono pedir.
+        self.initiative: set[str] = set()
+        self.initiative_max_per_hour = 6
+        self.initiative_repeat_gap_s = 1800.0
+        self._initiative_log: list[tuple[float, str]] = []  # (quando, assinatura)
+
+    def allow_initiative(self, names, max_per_hour: int = 6) -> None:
+        """Define o que ela pode fazer por conta própria. Só ações FREE entram."""
+        self.initiative = {n for n in names if (a := self._actions.get(n)) and a.tier == Tier.FREE}
+        self.initiative_max_per_hour = max(0, int(max_per_hour))
 
     def register(
         self,
@@ -134,7 +144,43 @@ class ActionRegistry:
             lines.append(f"- {a.name}{conf}: {a.description} [{ps}].{ex}")
         return "\n".join(lines)
 
+    def describe_initiative(self) -> str:
+        """As ações que ela pode tomar sozinha, para o prompt do pensamento."""
+        names = [n for n in sorted(self.initiative) if n in self._actions]
+        if not names:
+            return ""
+        lines = []
+        for n in names:
+            a = self._actions[n]
+            ps = ", ".join(f"{k}: {v}" for k, v in a.params.items()) or "sem parâmetros"
+            lines.append(f"- {n}: {a.description} [{ps}]")
+        return "\n".join(lines)
+
     # ------------------------------------------------------------ execução
+    async def request_initiative(self, call: ActionCall) -> ActionResult:
+        """Ela decidiu sozinha fazer algo (estilo J.A.R.V.I.S.).
+
+        Não usa confiança de dono: em vez disso, só passam as ações da lista
+        de iniciativa (todas FREE e reversíveis), com limite por hora e sem
+        repetir a mesma ação seguida. Nada que pede "sim" entra aqui.
+        """
+        action = self._actions.get(call.name)
+        if action is None:
+            return ActionResult(call.name, "unknown", "ação inexistente")
+        if call.name not in self.initiative or action.tier != Tier.FREE:
+            logger.warning("initiative denied: not allowed", action=call.name)
+            return ActionResult(call.name, "denied", "fora da lista de iniciativa")
+        now = time.time()
+        self._initiative_log = [(t, sig) for t, sig in self._initiative_log if now - t < 3600]
+        if len(self._initiative_log) >= self.initiative_max_per_hour:
+            return ActionResult(call.name, "denied", "limite de iniciativas por hora")
+        sig = f"{call.name} {json.dumps(call.args, sort_keys=True, ensure_ascii=False)}"
+        if any(s == sig and now - t < self.initiative_repeat_gap_s for t, s in self._initiative_log):
+            return ActionResult(call.name, "denied", "acabou de fazer isso")
+        self._initiative_log.append((now, sig))
+        logger.info("initiative action", action=call.name)
+        return await self._run(action, call)
+
     async def request(self, call: ActionCall, trust: Trust) -> ActionResult:
         action = self._actions.get(call.name)
         if action is None:

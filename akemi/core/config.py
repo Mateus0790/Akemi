@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-haiku-4-5"
 
+    # --- Cérebro reserva: se o principal cair (internet, NIM fora do ar), ela
+    # troca sozinha para o próximo da lista e volta quando ele se recupera ---
+    brain_fallback: list[ProviderName] = []  # ex. ["ollama"] ou ["ollama", "llamacpp"]
+    fallback_fast_model: str = "qwen2.5:7b"  # nome do modelo no cérebro reserva
+    fallback_deep_model: str = ""  # vazio = o mesmo do rápido
+    brain_retry_after_s: float = 120.0  # depois disso tenta voltar ao principal
+
     # --- Personalidade e estado ---
     persona_file: Path = Path("akemi/brain/persona.yaml")
     data_dir: Path = Path("data")
@@ -56,6 +63,13 @@ class Settings(BaseSettings):
     # --- Comportamento autônomo ---
     idle_think_interval_s: float = 180.0
     min_seconds_between_unprompted_speech: float = 60.0
+    # Iniciativa (estilo J.A.R.V.I.S.): nos momentos de pensamento ela pode
+    # fazer sozinha uma ação da lista abaixo e te contar o que fez.
+    initiative_enabled: bool = True
+    initiative_actions: list[str] = [
+        "criar_tarefa", "concluir_tarefa", "lembrete", "midia", "volume",
+    ]
+    initiative_max_per_hour: int = 6
     chat_batch_window_s: float = 6.0
     chat_max_replies_per_minute: int = 6
 

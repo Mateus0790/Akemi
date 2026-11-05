@@ -12,7 +12,8 @@ Comandos:
     /tela <texto>             simula algo visto na tela
     /audio <texto>            simula algo ouvido no áudio do PC
     /pensar                   força um momento de pensamento
-    /estado                   mostra humor, objetivo e tarefas
+    /estado                   mostra humor, objetivo, tarefas, gostos e opiniões
+    /saude                    como ela está por dentro (cérebro em uso, voz, autocura)
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
     /evolucao                 o que ela mudou em si (e o que está pendente)
@@ -89,6 +90,8 @@ async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool =
                 print(f"  (pensamento: {data.get('pensamento', '—')})")
             elif line == "/estado":
                 print(akemi.state.describe())
+            elif line == "/saude":
+                print(akemi.describe_health())
             elif line == "/corpo":
                 st = akemi.state
                 print(f"  corpo: {st.body or '—'} | sentidos: {', '.join(st.senses) or 'nenhum'}")

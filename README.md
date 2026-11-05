@@ -5,8 +5,9 @@ bases de dados (`data/`), logs, transcrições, screenshots ou arquivos `.env`.
 
 # Akemi
 
-Agente de IA autônomo e open-source para Windows, no estilo E.D.I.T.H. com a
-presença de uma VTuber de IA: roda em segundo plano, percebe o que acontece no
+Agente de IA autônomo e open-source para Windows, inspirado nas IAs do Homem
+de Ferro (J.A.R.V.I.S., F.R.I.D.A.Y., E.D.I.T.H.) e no Projeto Capricórnio de
+*Cyberpunk: Edgerunners 2*, com a presença de uma VTuber de IA: roda em segundo plano, percebe o que acontece no
 computador, conversa por voz, responde o chat da live e decide sozinha quando
 vale a pena falar ou agir.
 
@@ -42,6 +43,12 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   - autoevolução independente, mas sempre leal a você (`/evolucao`, `/desfazer N`)
   - ela sabe no que foi inspirada e conta se perguntarem
 
+- **Independência** ([docs/INDEPENDENCIA.md](docs/INDEPENDENCIA.md)):
+  - cérebro reserva local (Ollama/llama.cpp): se a nuvem cair, ela troca sozinha e volta depois
+  - autocura: reinicia o que quebrar (Twitch, chat, voz, rotinas) e te avisa (`/saude`)
+  - vontade própria: gostos, opiniões, vontades e objetivos que ela forma sozinha
+  - iniciativa estilo J.A.R.V.I.S.: faz ações seguras por conta própria e te conta
+
 **Ainda falta:** integração com o Hermes e avatar.
 
 ## Instalação
@@ -74,7 +81,8 @@ Comandos no console:
 | `/tela <texto>` | simula algo visto na tela |
 | `/audio <texto>` | simula algo ouvido no PC |
 | `/pensar` | força um momento de pensamento |
-| `/estado` | mostra humor, objetivo e tarefas |
+| `/estado` | mostra humor, objetivo, tarefas, gostos e opiniões |
+| `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |

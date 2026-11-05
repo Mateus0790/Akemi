@@ -82,6 +82,7 @@ def test_build_tts_selects_engine(tmp_path):
     assert isinstance(build_tts(Settings(_env_file=None)), ConsoleTTS)
     s = Settings(_env_file=None, tts_engine="piper", piper_model_path=tmp_path / "v.onnx")
     engine = build_tts(s)
+    engine = getattr(engine, "engine", engine)  # a voz vem dentro do ResilientTTS (autocura)
     assert isinstance(engine, (PiperTTS, ConsoleTTS))  # Console se sounddevice faltar
 
 
@@ -180,7 +181,7 @@ def test_build_tts_kokoro(tmp_path):
     from akemi.tts.kokoro_engine import KokoroTTS
 
     s = Settings(_env_file=None, tts_engine="kokoro", kokoro_voice="pm_alex")
-    engine = build_tts(s)
+    engine = build_tts(s).engine  # dentro do ResilientTTS (autocura)
     assert isinstance(engine, KokoroTTS) and engine.voice == "pm_alex"
 
 

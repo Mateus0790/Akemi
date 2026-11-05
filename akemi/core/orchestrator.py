@@ -13,12 +13,13 @@ from akemi.actions.registry import ActionRegistry
 from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
-from akemi.brain.providers import LLMProvider, build_provider
+from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
 from akemi.brain.self_improve import Evolution, Proposal
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
 from akemi.core.config import Settings
 from akemi.core.events import Event, EventBus, Priority, Trust
+from akemi.core.health import Health, ResilientTTS, supervise
 from akemi.core.pause import PauseSwitch
 from akemi.core.senses import Senses
 from akemi.live.chat import ChatBatcher, ChatMessage
@@ -67,22 +68,22 @@ def build_tts(settings: Settings) -> TTSEngine:
         if settings.tts_engine == "kokoro":
             from akemi.tts.kokoro_engine import KokoroTTS
 
-            return KokoroTTS(
+            return ResilientTTS(KokoroTTS(
                 settings.kokoro_model_path,
                 settings.kokoro_voices_path,
                 voice=settings.kokoro_voice,
                 speed=settings.kokoro_speed,
                 player=player,
-            )
+            ))
         from akemi.tts.piper_engine import PiperTTS
 
-        return PiperTTS(
+        return ResilientTTS(PiperTTS(
             settings.piper_model_path,
             speaker_id=settings.piper_speaker_id,
             length_scale=settings.piper_length_scale,
             volume=settings.piper_volume,
             player=player,
-        )
+        ))
     except RuntimeError as exc:
         logger.error("tts unavailable, falling back to console", engine=settings.tts_engine, error=str(exc))
     return ConsoleTTS()
@@ -102,6 +103,7 @@ class Akemi:
     ) -> None:
         self.settings = settings
         self.bus = EventBus()
+        self.health = Health(self.bus)
         self.pause = PauseSwitch()
         data = settings.data_dir
         self.state_path = data / "state.json" if persist else None
@@ -109,13 +111,12 @@ class Akemi:
         self.memory = memory or Memory(data / "memory.sqlite3" if persist else ":memory:")
         self.moderator = Moderator.from_file(data / "blocklist.txt")
 
-        fast = fast or build_provider(settings.brain_provider, settings)
-        if deep is None:
-            deep = (
-                fast
-                if settings.effective_deep_provider == settings.brain_provider
-                else build_provider(settings.effective_deep_provider, settings)
-            )
+        if fast is None:
+            fast, built_deep = build_brains(settings, on_switch=self._brain_switched("cerebro"))
+            if built_deep is not fast and isinstance(built_deep, FallbackProvider):
+                built_deep.on_switch = self._brain_switched("cerebro_profundo")
+            deep = deep or built_deep
+        deep = deep or fast
         self.models = Models(fast, settings.fast_model, deep, settings.deep_model, settings.llm_temperature)
 
         self.actions = ActionRegistry()
@@ -126,6 +127,7 @@ class Akemi:
             from akemi.actions.desktop import register_desktop_actions
 
             register_desktop_actions(self.actions)
+        self.allow_initiative()
 
         self.persist = persist
         self.desktop_actions = desktop_actions
@@ -150,8 +152,13 @@ class Akemi:
             owner_name=settings.owner_name,
             min_unprompted_gap_s=settings.min_seconds_between_unprompted_speech,
             state_path=self.state_path,
+            health=self.health,
+            initiative=settings.initiative_enabled,
         )
-        self.speaker = Speaker(self.bus, tts or build_tts(settings), self.moderator)
+        engine = tts or build_tts(settings)
+        if isinstance(engine, ResilientTTS) and engine.on_health is None:
+            engine.on_health = lambda ok, detail: self.health.report("voz", ok, detail, label="voz")
+        self.speaker = Speaker(self.bus, engine, self.moderator)
         self.chat = ChatBatcher(
             self.bus,
             self.moderator,
@@ -163,6 +170,51 @@ class Akemi:
         self.senses = Senses(
             self.bus, settings, self.speaker, self.pause, vision_fallback=self.models.fast
         )
+
+    # ------------------------------------------------------------ autocura
+    def allow_initiative(self) -> None:
+        """(Re)aplica a lista de iniciativa: chamar de novo depois de registrar ações."""
+        self.actions.allow_initiative(
+            self.settings.initiative_actions if self.settings.initiative_enabled else [],
+            self.settings.initiative_max_per_hour,
+        )
+
+    def _brain_switched(self, part: str):
+        def on_switch(previous: str, now: str, reason: str) -> None:
+            provider = self.models.fast if part == "cerebro" else self.models.deep
+            primary = getattr(provider, "primary", now)
+            ok = now == primary
+            detail = "principal de volta" if ok else f"usando o reserva ({now}); {previous} falhou: {reason[:80]}"
+            label = "cérebro" if part == "cerebro" else "cérebro profundo"
+            self.health.report(part, ok, detail, label=label)
+
+        return on_switch
+
+    def _supervised(self, name: str, factory, label: str = "") -> asyncio.Task:
+        return asyncio.create_task(supervise(name, factory, self.health, label=label), name=name)
+
+    def health_report(self) -> dict:
+        report = {"partes": self.health.snapshot()}
+        for key, provider in (("cerebro", self.models.fast), ("cerebro_profundo", self.models.deep)):
+            if isinstance(provider, FallbackProvider):
+                report[key] = provider.status()
+        return report
+
+    def describe_health(self) -> str:
+        lines = [self.health.describe()]
+        if not isinstance(self.models.fast, FallbackProvider):
+            lines.append(f"  cérebro: {self.models.fast.name} (sem reserva: veja BRAIN_FALLBACK)")
+        for key, provider in (("cérebro", self.models.fast), ("cérebro profundo", self.models.deep)):
+            if isinstance(provider, FallbackProvider):
+                st = provider.status()
+                if key == "cérebro profundo" and provider is self.models.fast:
+                    continue
+                reserves = ", ".join(
+                    f"{b['nome']}{'' if b['ok'] else ' (fora, tenta em ' + str(b['volta_em_s']) + 's)'}"
+                    for b in st["cerebros"]
+                )
+                lines.append(f"  {key}: usando {st['ativo']} | ordem: {reserves}")
+        return "\n".join(lines)
 
     # ----------------------------------------------------------- entradas
     def owner_say(self, text: str, source: str = "console") -> None:
@@ -248,11 +300,12 @@ class Akemi:
                 logger.error("tts failed to load, falling back to console", error=str(exc))
                 self.speaker.engine = ConsoleTTS()
         self._tasks += [self.bus.start(), self.speaker.start()]
-        self._tasks.append(asyncio.create_task(self.chat.run(), name="chat-batcher"))
+        self._tasks.append(self._supervised("chat-batcher", self.chat.run, "leitura do chat"))
         if self.settings.idle_think_interval_s > 0:
-            self._tasks.append(asyncio.create_task(self._idle_ticker(), name="idle"))
+            self._tasks.append(self._supervised("idle", self._idle_ticker, "rotina de pensamentos"))
         if self.persist and self.settings.self_improve_interval_s > 0:
-            self._tasks.append(asyncio.create_task(self._evolution_ticker(), name="evolution"))
+            self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
+        self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
         if self.settings.twitch_channel:
             from akemi.live.twitch import TwitchChat
 
@@ -260,7 +313,7 @@ class Akemi:
                 self.settings.twitch_channel, self.chat,
                 self.settings.twitch_nick, self.settings.twitch_oauth_token,
             )
-            self._tasks.append(asyncio.create_task(twitch.run(), name="twitch"))
+            self._tasks.append(self._supervised("twitch", twitch.run, "conexão com a Twitch"))
         self.senses.start()
         if self.senses.screen is not None:
             screen = self.senses.screen
@@ -280,6 +333,29 @@ class Akemi:
             deep=self.models.deep_model,
             provider=self.settings.brain_provider,
         )
+
+    async def _watchdog(self, interval_s: float = 15.0) -> None:
+        """Confere de tempos em tempos as partes que não são tarefas supervisionadas
+        (barramento e fila de voz) e religa o que tiver parado."""
+        while True:
+            await asyncio.sleep(interval_s)
+            try:
+                self.check_vitals()
+            except Exception:  # o vigia nunca derruba ninguém
+                logger.exception("watchdog failed")
+
+    def check_vitals(self) -> None:
+        for name, label, task, restart in (
+            ("barramento", "sistema nervoso", self.bus._task, self.bus.start),
+            ("fala", "fila de fala", self.speaker._task, self.speaker.start),
+        ):
+            if task is not None and task.done() and not task.cancelled():
+                exc = task.exception()
+                self.health.report(name, False, f"parou: {exc!r}", label=label)
+                new = restart()
+                if new not in self._tasks:
+                    self._tasks.append(new)
+                self.health.report(name, True, "religada", label=label)
 
     def _on_speech_finished(self, event: Event) -> None:
         # Depois que ela responde a você (ou fala por conta própria), dá
