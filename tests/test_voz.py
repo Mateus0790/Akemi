@@ -263,3 +263,28 @@ def test_real_model_loads_and_embeds():
     tone = (np.sin(np.linspace(0, 2000, 32000)) * 0.3).astype(np.float32)
     v = emb(tone)
     assert v.ndim == 1 and v.size >= 64 and np.isfinite(v).all()
+
+
+def _voice(rng, base, spread=0.15):
+    return base + rng.normal(0, spread / np.sqrt(len(base)), len(base))
+
+
+def test_noise_sample_is_dropped_and_does_not_lower_the_limit():
+    rng = np.random.default_rng(1)
+    base = rng.normal(0, 1, 256)
+    base /= np.linalg.norm(base)
+    clean = [_voice(rng, base) for _ in range(7)]
+    noise = rng.normal(0, 1, 256)
+    with_noise = build_print([*clean, noise])
+    assert with_noise.samples == 7
+    assert with_noise.accept == pytest.approx(build_print(clean).accept)
+
+
+def test_too_many_bad_samples_are_not_hidden():
+    rng = np.random.default_rng(2)
+    base = rng.normal(0, 1, 256)
+    base /= np.linalg.norm(base)
+    good = [_voice(rng, base) for _ in range(4)]
+    bad = [rng.normal(0, 1, 256) for _ in range(4)]
+    with pytest.raises(VoiceError):
+        build_print(good + bad)
