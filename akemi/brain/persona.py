@@ -14,6 +14,8 @@ DEFAULT_PERSONA_PATH = Path(__file__).with_name("persona.yaml")
 class Persona:
     name: str = "Akemi"
     identity: str = ""
+    inspiration: str = ""
+    loyalty: str = ""  # núcleo fixo: a autoevolução nunca mexe nisto
     traits: list[str] = field(default_factory=list)
     speech_rules: list[str] = field(default_factory=list)
     live_rules: list[str] = field(default_factory=list)
@@ -41,6 +43,8 @@ class Persona:
         return cls(
             name=raw.get("name", "Akemi"),
             identity=fmt(raw.get("identity", "")),
+            inspiration=fmt(raw.get("inspiration", "")),
+            loyalty=fmt(raw.get("loyalty", "")),
             traits=fmt(raw.get("traits", [])),
             speech_rules=fmt(raw.get("speech_rules", [])),
             live_rules=fmt(raw.get("live_rules", [])),
@@ -67,7 +71,7 @@ class Persona:
         )
 
     def system_prompt(self, *, live: bool = False, extra: str = "") -> str:
-        parts = [self.identity]
+        parts = [self.identity, self.loyalty, self.inspiration]
         if self.traits:
             parts.append("Personalidade:\n" + "\n".join(f"- {t}" for t in self.traits))
         if self.speech_rules:

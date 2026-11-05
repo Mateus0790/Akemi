@@ -131,7 +131,10 @@ class Akemi:
         self.desktop_actions = desktop_actions
         # Persona base (yaml) + o que ela aprendeu e você aprovou.
         self.base_persona = Persona.load(resolve_persona_file(settings), owner=settings.owner_name)
-        self.evolution = Evolution(data / "evolucao.json" if persist else None, self.moderator)
+        self.evolution = Evolution(
+            data / "evolucao.json" if persist else None, self.moderator,
+            owner=settings.owner_name, autonomous=settings.self_improve_autonomous,
+        )
         # Só o modo local é "corpo" do próprio núcleo; o servidor anuncia o corpo remoto.
         self.local_body = True
 
@@ -184,18 +187,31 @@ class Akemi:
         self.mind.persona = self.evolution.apply(self.base_persona)
 
     async def evolve(self, force: bool = False) -> list[Proposal]:
-        """Ela relê as conversas e propõe mudanças em si mesma (pendentes)."""
+        """Ela relê as conversas e muda a si mesma (ou propõe, sem modo autônomo)."""
         made = await self.evolution.reflect(
             self.models.fast, self.models.fast_model, self.memory, self.mind.persona,
             min_conversations=self.settings.self_improve_min_conversations, force=force,
         )
-        if made and not force and not self.pause.paused:
+        if not made:
+            return made
+        if self.evolution.autonomous:
+            self._refresh_persona()
+        if not force and not self.pause.paused:
             self.bus.publish(Event(
                 "speech.say",
-                {"text": "Pensei numas mudanças em mim. Dá uma olhada quando puder.", "origin": "evolucao"},
+                {"text": self._evolution_news(made), "origin": "evolucao"},
                 source="evolucao", trust=Trust.SYSTEM, priority=Priority.LOW,
             ))
         return made
+
+    def _evolution_news(self, made: list[Proposal]) -> str:
+        """O que ela conta ao dono depois de mudar (lealdade: nada escondido)."""
+        if not self.evolution.autonomous:
+            return "Pensei numas mudanças em mim. Dá uma olhada quando puder."
+        first = made[0]
+        what = f": {first.text}" if first.kind != "exemplo" else " no jeito de te responder"
+        more = " E mais uma coisinha, tá no histórico." if len(made) > 1 else ""
+        return f"Mudei uma coisa em mim{what}.{more} Se não curtir, é só desfazer."
 
     def decide_evolution(self, action: str, pid: int) -> Proposal:
         """``aprovar`` | ``rejeitar`` | ``desfazer``. Só o dono chama isto."""

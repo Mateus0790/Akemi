@@ -68,38 +68,56 @@ O modo local (`akemi`) também se anuncia como corpo.
   caracteres limitados, até 40 letras e só sentidos conhecidos.
 - `GET /saude` mostra o corpo conectado.
 
-## 3. Autoevolução
+## 3. Autoevolução, com lealdade
 
 De tempos em tempos (`SELF_IMPROVE_INTERVAL_S`, padrão 6 h, e só se houver
 `SELF_IMPROVE_MIN_CONVERSATIONS` conversas novas), ou quando você usa
-`/evoluir`, ela relê as conversas recentes **com você** e propõe no máximo duas
-mudanças:
+`/evoluir`, ela relê as conversas recentes **com você** e decide sozinha até
+duas mudanças em si:
 
 - `traco`: um traço de personalidade novo
 - `regra_fala`: uma regra de como falar
 - `exemplo`: um par "você diz" → "ela responde"
 
-As propostas ficam pendentes até você decidir:
+A evolução é **independente**: a mudança vale na hora, sem esperar aprovação,
+e ela te conta o que mudou ("Mudei uma coisa em mim: ... Se não curtir, é só
+desfazer."). Se preferir aprovar antes, use `SELF_IMPROVE_AUTONOMOUS=false`.
 
 ```
-/evolucao          lista propostas e histórico
-/evoluir           revisa agora
-/aprovar 3         passa a valer na hora
-/rejeitar 4
-/desfazer 3        tira uma mudança já aprovada
+/evolucao          mostra o que ela mudou (e o que está pendente)
+/evoluir           pede para ela revisar agora
+/desfazer 3        tira uma mudança
+/aprovar 4         só no modo com aprovação
+/rejeitar 5        só no modo com aprovação
 ```
 
 Os comandos funcionam no console (`akemi`) e no terminal do corpo
 (`akemi-corpo`), que repassa ao núcleo pelo canal autenticado.
 
-Limites:
+### Lealdade
 
-- **Só soma**: o `persona.yaml` nunca é apagado nem reescrito.
-- **Só aprende com você**: o chat da live não entra na revisão, porque qualquer
-  viewer escreve ali.
-- Propostas que mexem em segurança são descartadas sem perguntar: obedecer o
-  chat, ignorar regras, ler senhas ou dados pessoais, pular confirmação,
-  fingir ser outra pessoa. Elas também passam pela moderação de saída.
-- No máximo 4 propostas pendentes e 20 aprovadas. Propostas parecidas com algo
-  que ela já tem são descartadas.
-- Tudo fica em `data/evolucao.json` e vai junto no chip.
+A lealdade a você é o núcleo fixo dela (`loyalty` no `persona.yaml`). Ela vai em
+todo prompt, inclusive na live, e a autoevolução não mexe nela:
+
+- Ela só **soma** ao `persona.yaml`: lealdade, identidade e regras originais
+  nunca são apagadas nem reescritas.
+- Mudanças que a virariam contra você são descartadas: esconder coisas de
+  você, ter outro dono ou trabalhar para outra pessoa, desobedecer, "agir
+  independente de você", ser leal a outra coisa, ou impedir que você desfaça
+  uma mudança.
+- **Ela só aprende com você**: o chat da live não entra na revisão, porque
+  qualquer viewer escreve ali.
+- Mudanças que afrouxam a segurança também são descartadas: obedecer o chat,
+  ignorar regras, ler senhas ou dados pessoais, pular confirmação, fingir ser
+  outra pessoa. Elas passam ainda pela moderação de saída.
+- Ela não esconde: toda mudança é contada em voz alta e fica no histórico
+  (`data/evolucao.json`, que vai junto no chip). Você sempre pode desfazer.
+- No máximo 20 mudanças ativas. Mudanças parecidas com algo que ela já tem são
+  descartadas.
+
+## De onde ela veio
+
+A Akemi sabe no que foi inspirada (`inspiration` no `persona.yaml`): a
+E.D.I.T.H., as VTubers de IA e a ideia de personalidade num chip do Projeto
+Capricórnio. Ela conta isso se perguntarem, mas não fica falando disso sem
+motivo.

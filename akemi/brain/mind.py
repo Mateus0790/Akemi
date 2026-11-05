@@ -53,7 +53,8 @@ SELF_INTRO_RE = re.compile(
 )
 # ...a não ser que ele pergunte justamente isso.
 IDENTITY_QUESTION = re.compile(
-    r"\b(quem (é|e) voc[eê]|o que voc[eê] (é|e)\b|quem te (criou|fez)|qual (modelo|ia)|voc[eê] (é|e) (uma )?ia)",
+    r"\b(quem (é|e) voc[eê]|o que voc[eê] (é|e)\b|quem te (criou|fez)|qual (modelo|ia)|voc[eê] (é|e) (uma )?ia|"
+    r"inspira\w*|de onde voc[eê] (veio|surgiu)|como voc[eê] (surgiu|nasceu))",
     re.I,
 )
 # "o que tem na tela?", "tá vendo isso?", "olha aqui", "lê isso aí"

@@ -39,7 +39,8 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Projeto Capricórnio** ([docs/CAPRICORNIO.md](docs/CAPRICORNIO.md)):
   - chip de identidade portátil e assinado (`akemi-chip`)
   - ela sabe em que corpo está e percebe quando troca
-  - autoevolução com sua aprovação (`/evolucao`, `/aprovar N`)
+  - autoevolução independente, mas sempre leal a você (`/evolucao`, `/desfazer N`)
+  - ela sabe no que foi inspirada e conta se perguntarem
 
 **Ainda falta:** integração com o Hermes e avatar.
 
@@ -77,7 +78,7 @@ Comandos no console:
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
-| `/aprovar N`, `/rejeitar N`, `/desfazer N` | decide sobre uma proposta |
+| `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
 | `/chip <arquivo>` | grava a identidade dela num chip |
 
 ## Voz

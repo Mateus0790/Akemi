@@ -15,9 +15,9 @@ Comandos:
     /estado                   mostra humor, objetivo e tarefas
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
-    /evolucao                 o que ela quer mudar em si (e o que já mudou)
+    /evolucao                 o que ela mudou em si (e o que está pendente)
     /evoluir                  pede para ela revisar as conversas agora
-    /aprovar N | /rejeitar N | /desfazer N
+    /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
     /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
     /sair
 """

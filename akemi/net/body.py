@@ -11,7 +11,7 @@ No terminal do corpo:
     qualquer texto      fala com ela (como dono)
     /olhar              faz ela olhar a tela agora (com --tela)
     /pausar | /voltar   pausa/retoma a autonomia dela
-    /evolucao           mostra o que ela quer mudar em si (e o que já mudou)
+    /evolucao           mostra o que ela mudou em si (e o que está pendente)
     /evoluir            pede para ela revisar as conversas agora
     /aprovar N | /rejeitar N | /desfazer N
     /sair
