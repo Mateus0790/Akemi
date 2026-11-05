@@ -44,6 +44,8 @@ VOICE_FILE = "voz.json"
 FORMAT_VERSION = 1
 MIN_ENROLL_SAMPLES = 4
 MIN_ENROLL_SECONDS = 1.5
+MAX_DROPPED = 2  # mais que isso, é melhor recusar e pedir para gravar de novo
+OUTLIER_GAP = 0.15  # o quanto uma amostra pode ficar abaixo da mediana
 MAX_DIM = 4096
 
 Who = Literal["dono", "outro", "incerto"]
@@ -130,6 +132,11 @@ class VoicePrint:
             raise VoiceError(f"não consegui ler {path}: {exc}") from exc
 
 
+def _leave_one_out(vecs: np.ndarray) -> list[float]:
+    """O quanto cada amostra parece com a média das outras."""
+    return [float(vecs[i] @ _unit(np.delete(vecs, i, axis=0).mean(axis=0))) for i in range(len(vecs))]
+
+
 def build_print(embeddings: list[np.ndarray], model: str = "", *, margin: float = 0.03, band: float = 0.15) -> VoicePrint:
     """Monta a impressão do dono e calibra os limites com as próprias amostras.
 
@@ -140,11 +147,14 @@ def build_print(embeddings: list[np.ndarray], model: str = "", *, margin: float 
     if len(embeddings) < MIN_ENROLL_SAMPLES:
         raise VoiceError(f"preciso de pelo menos {MIN_ENROLL_SAMPLES} frases")
     vecs = np.stack([_unit(e) for e in embeddings])
+    loo = _leave_one_out(vecs)
+    # Barulho que passou por fala estraga o limite: ele vem da pior amostra.
+    bad = [i for i, score in enumerate(loo) if score < float(np.median(loo)) - OUTLIER_GAP]
+    if 0 < len(bad) <= MAX_DROPPED and len(vecs) - len(bad) >= MIN_ENROLL_SAMPLES:
+        logger.info("voice samples dropped", dropped=len(bad), scores=[round(loo[i], 3) for i in bad])
+        vecs = np.delete(vecs, bad, axis=0)
+        loo = _leave_one_out(vecs)
     centroid = _unit(vecs.mean(axis=0))
-    loo = []
-    for i in range(len(vecs)):
-        others = _unit(np.delete(vecs, i, axis=0).mean(axis=0))
-        loo.append(float(vecs[i] @ others))
     if float(np.mean(loo)) < 0.5:
         raise VoiceError(
             "as frases não parecem da mesma voz (barulho ou mais de uma pessoa falando). Tente de novo em silêncio."
