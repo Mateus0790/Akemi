@@ -92,6 +92,7 @@ Comandos no console:
 | `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
 | `/pr <pedido>`, `/prs` | ela abre um PR no próprio código; lista os PRs dela |
 | `/voz` | reconhecimento da sua voz: cadastro e quem ela ouviu |
+| `analisa a pasta X` | ela lê em segundo plano e conta depois ([docs/ARQUIVOS.md](docs/ARQUIVOS.md)) |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |

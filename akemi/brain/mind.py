@@ -42,7 +42,7 @@ MOOD_TAG_RE = re.compile(r"\[\[\s*humor\s*:\s*([\wçãéíóú]+)\s*\]\]", re.I)
 SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
 # Promessa de ação sem a tag ("vou te lembrar", "abrindo o Discord", "anotado").
 ACTION_PROMISE_RE = re.compile(
-    r"\b((vou|j[aá] vou|deixa que eu|pode deixar que eu)\s+(te\s+)?(lembrar|avisar|abrir|fechar|pausar|tocar|pesquisar|anotar|guardar|aumentar|abaixar|baixar|pular|mutar)|te (lembro|aviso)|(eu )?me lembro|guardo|(abrindo|fechando|pausando|pesquisando|anotando|guardando|pulando)|anotad[oa]|guardad[oa])\b",
+    r"\b((vou|j[aá] vou|deixa que eu|pode deixar que eu)\s+(te\s+)?(lembrar|avisar|abrir|fechar|pausar|tocar|pesquisar|anotar|guardar|aumentar|abaixar|baixar|pular|mutar|analisar|ler)|vou dar uma olhada|te (lembro|aviso)|(eu )?me lembro|guardo|(abrindo|fechando|pausando|pesquisando|analisando|anotando|guardando|pulando)|anotad[oa]|guardad[oa])\b",
     re.I,
 )
 # Auto-apresentação que o modelo insiste em fazer mesmo instruído a não fazer
@@ -155,6 +155,8 @@ class Mind:
             triggers or TriggerSet([]), min_unprompted_gap_s=min_unprompted_gap_s
         )
         self.history: deque[Message] = deque(maxlen=20)
+        # Reconhece pedidos claros sem gastar o modelo (ex.: análise de arquivos).
+        self.direct_request: Callable[[str], ActionCall | None] | None = None
         self.live_history: deque[Message] = deque(maxlen=10)
         self.guest_history: deque[Message] = deque(maxlen=6)
         self.ambient: deque[tuple[float, str, str]] = deque(maxlen=15)
@@ -336,6 +338,11 @@ class Mind:
                         self.say(msg, event)
                     return
 
+            direct = self.direct_request(text) if self.direct_request else None
+            if direct is not None:
+                await self._run_direct(direct, text, event)
+                return
+
             system = self.persona.system_prompt(
                 extra=self._context_block(text, include_actions=True)
             )
@@ -374,6 +381,22 @@ class Mind:
                 self.history.append(Message("assistant", reply))
             self.memory.add_episode("conversa", f"{self.owner}: {text}\nAkemi: {spoken}")
             self._save_state()
+
+    async def _run_direct(self, call: ActionCall, text: str, event: Event) -> None:
+        """Pedido reconhecido sem o modelo: executa com as mesmas regras de confiança."""
+        result = await self.actions.request(call, event.trust)
+        logger.info("direct action", action=call.name, status=result.status)
+        if result.status == "executed":
+            reply = str(result.value or "Feito.")
+        elif result.status == "error":
+            reply = f"Não consegui: {result.detail}"
+        else:
+            reply = result.detail or "Não posso fazer isso."
+        self.say(reply, event)
+        self.history.append(Message("user", text))
+        self.history.append(Message("assistant", reply))
+        self.memory.add_episode("conversa", f"{self.owner}: {text}\nAkemi: {reply}")
+        self._save_state()
 
     # ===================================================== voz de outra pessoa
     async def on_guest_voice(self, event: Event) -> None:

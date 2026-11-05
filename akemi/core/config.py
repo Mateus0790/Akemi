@@ -142,6 +142,12 @@ class Settings(BaseSettings):
     vision_provider: ProviderName | None = None  # default = brain_provider
     vision_describe_interval_s: float = 45.0
 
+    # --- Análise de arquivos (docs/ARQUIVOS.md) ---
+    files_enabled: bool = True
+    files_allowed_dirs: list[Path] = []  # sem nenhuma pasta liberada, a ação não existe
+    files_allow_cloud: bool = False  # true = aceita mandar o conteúdo para um modelo na nuvem
+    files_max_per_run: int = 12  # arquivos lidos por pedido, ao analisar uma pasta
+
     @property
     def effective_deep_provider(self) -> ProviderName:
         return self.deep_provider or self.brain_provider
