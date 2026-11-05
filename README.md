@@ -51,6 +51,8 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - **Reconhece a sua voz** ([docs/VOZ.md](docs/VOZ.md)): `akemi --cadastrar-voz`. Outra
   pessoa no microfone conversa com ela, mas não manda nela
+- **Oficina** ([docs/OFICINA.md](docs/OFICINA.md)): ela muda o próprio código e abre um
+  PR para você revisar ("abre um PR para ...", `/pr`)
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
 
@@ -88,6 +90,7 @@ Comandos no console:
 | `/pensar` | força um momento de pensamento |
 | `/estado` | mostra humor, objetivo, tarefas, gostos e opiniões |
 | `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
+| `/pr <pedido>`, `/prs` | ela abre um PR no próprio código; lista os PRs dela |
 | `/voz` | reconhecimento da sua voz: cadastro e quem ela ouviu |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |
@@ -283,12 +286,12 @@ pytest
 
 Os testes não precisam de rede, API key nem placa de som (usam um LLM falso).
 
-## Self-improve (planejado)
+## Oficina: ela abre PR no próprio código
 
-Módulo opcional que analisa erros dos logs, gera um patch, roda os testes numa
-worktree isolada e abre um Pull Request com descrição sanitizada (no máximo 1 por
-dia, com rollback automático). Mesmo com cérebro 100% local, ele publicaria PRs
-públicos — por isso fica desligado por padrão.
+Peça "abre um PR para ..." (ou `/pr <pedido>` no console) e ela muda o próprio
+código numa cópia isolada, roda os testes e abre um PR como rascunho para você
+revisar. Ela nunca faz merge, não mexe nos arquivos de segurança e fica
+desligada até você configurar um token. Veja [docs/OFICINA.md](docs/OFICINA.md).
 
 ## Contribuindo
 

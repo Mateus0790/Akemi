@@ -92,6 +92,17 @@ class Settings(BaseSettings):
     server_port: int = 8765
     server_url: str = ""  # onde o corpo acha o núcleo, ex. ws://192.168.0.10:8765
 
+    # --- Oficina: ela mexe no próprio código e abre PR (docs/OFICINA.md) ---
+    oficina_enabled: bool = False
+    github_token: str = ""  # fine-grained, só este repositório: Contents e Pull requests (escrita)
+    github_repo: str = "Mateus0790/Akemi"
+    oficina_repo_dir: Path = Path(".")  # onde o repositório está clonado
+    oficina_base: str = "main"
+    oficina_per_day: int = 2
+    oficina_model: str = ""  # vazio = DEEP_MODEL
+    oficina_llm_timeout_s: float = 300.0  # escrever código demora mais que conversar
+    oficina_test_timeout_s: float = 900.0
+
     # --- Rede ---
     control_api_host: str = "127.0.0.1"
     control_api_port: int = 8765

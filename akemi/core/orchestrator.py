@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import socket
 from pathlib import Path
 
 import structlog
 
 from akemi.actions.builtin import register_builtin_actions
-from akemi.actions.registry import ActionRegistry
+from akemi.actions.registry import ActionRegistry, Tier
 from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
@@ -127,6 +128,7 @@ class Akemi:
             from akemi.actions.desktop import register_desktop_actions
 
             register_desktop_actions(self.actions)
+        self.oficina = self._build_oficina()
         self.allow_initiative()
 
         self.persist = persist
@@ -173,6 +175,68 @@ class Akemi:
             on_voice_problem=lambda why: self.health.report(
                 "reconhecimento_voz", False, why, label="parte que reconhece sua voz"),
         )
+
+    # ------------------------------------------------------------- oficina
+    def _build_oficina(self):
+        """A oficina, se ligada e com o que precisa (token, repositório clonado). Senão None."""
+        s = self.settings
+        if not s.oficina_enabled:
+            return None
+        if not s.github_token:
+            logger.warning("oficina off: GITHUB_TOKEN missing")
+            return None
+        repo_dir = Path(s.oficina_repo_dir)
+        if not (repo_dir / ".git").exists() or shutil.which("git") is None:
+            logger.warning("oficina off: needs git and the cloned repository", repo_dir=str(repo_dir))
+            return None
+        from akemi.brain.providers import build_provider
+        from akemi.oficina import Oficina
+
+        try:
+            llm = build_provider(
+                s.effective_deep_provider, s.model_copy(update={"llm_timeout_s": s.oficina_llm_timeout_s})
+            )
+            oficina = Oficina(
+                repo_dir=repo_dir, repo=s.github_repo, token=s.github_token, llm=llm,
+                model=s.oficina_model or s.deep_model, data_dir=s.data_dir, base=s.oficina_base,
+                per_day=s.oficina_per_day, test_timeout_s=s.oficina_test_timeout_s,
+            )
+        except Exception as exc:
+            logger.warning("oficina off", error=str(exc))
+            return None
+        self._register_oficina_action(oficina)
+        return oficina
+
+    def _register_oficina_action(self, oficina) -> None:
+        @self.actions.register(
+            "abrir_pr", "muda o seu próprio código e abre um Pull Request no GitHub para o dono revisar",
+            tier=Tier.CONFIRM, params={"pedido": "o que mudar ou criar, em uma frase"},
+            confirm="Abro um PR no GitHub para isso: {pedido}?",
+            example=("cria uma habilidade de previsão do tempo e abre um PR",
+                     '[[acao:abrir_pr {"pedido": "criar uma ação que diz a previsão do tempo"}]]'),
+        )
+        def abrir_pr(pedido: str) -> str:
+            if oficina.busy:
+                return "Já tô mexendo em outro PR, espera esse terminar."
+            task = asyncio.get_running_loop().create_task(self.open_pr(pedido))
+            self._tasks.append(task)
+            return "Beleza, vou mexer no meu código. Isso leva uns minutos, te aviso quando o PR estiver pronto."
+
+    async def open_pr(self, request: str):
+        """Roda a oficina e conta o resultado (lealdade: nada escondido)."""
+        if self.oficina is None:
+            raise RuntimeError("oficina desligada")
+        result = await self.oficina.propose(request)
+        self.memory.add_episode("oficina", result.describe())
+        if result.status == "aberto":
+            text = f"Abri um PR: {result.title}. Tá no GitHub esperando você revisar."
+        elif result.status == "recusado":
+            text = f"Não abri o PR: {result.detail}."
+        else:
+            text = f"Tentei fazer isso no meu código, mas não deu: {result.detail}."
+        self.bus.publish(Event("speech.say", {"text": text, "origin": "oficina"},
+                               source="oficina", trust=Trust.SYSTEM, priority=Priority.NORMAL))
+        return result
 
     # ------------------------------------------------------------ autocura
     def allow_initiative(self) -> None:
