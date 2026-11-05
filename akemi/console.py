@@ -14,6 +14,11 @@ Comandos:
     /pensar                   força um momento de pensamento
     /estado                   mostra humor, objetivo e tarefas
     /pausar | /voltar         pausa/retoma a autonomia
+    /corpo                    mostra em que corpo ela está e os sentidos dele
+    /evolucao                 o que ela quer mudar em si (e o que já mudou)
+    /evoluir                  pede para ela revisar as conversas agora
+    /aprovar N | /rejeitar N | /desfazer N
+    /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
     /sair
 """
 
@@ -84,6 +89,40 @@ async def run(echo: bool, voice: bool = False, mic: bool = False, screen: bool =
                 print(f"  (pensamento: {data.get('pensamento', '—')})")
             elif line == "/estado":
                 print(akemi.state.describe())
+            elif line == "/corpo":
+                st = akemi.state
+                print(f"  corpo: {st.body or '—'} | sentidos: {', '.join(st.senses) or 'nenhum'}")
+            elif line == "/evolucao":
+                print(akemi.evolution.describe())
+            elif line == "/evoluir":
+                made = await akemi.evolve(force=True)
+                print("\n".join(p.describe() for p in made) or "  (nada para mudar agora)")
+            elif line.split()[0] in ("/aprovar", "/rejeitar", "/desfazer"):
+                cmd, _, arg = line.partition(" ")
+                arg = arg.strip().lstrip("#")
+                if not arg.isdigit():
+                    print(f"  uso: {cmd} <número>")
+                    continue
+                try:
+                    print("  " + akemi.decide_evolution(cmd[1:], int(arg)).describe())
+                except ValueError as exc:
+                    print(f"  (não deu: {exc})")
+            elif line.startswith("/chip "):
+                from pathlib import Path
+
+                from akemi.storage.chip import ChipError, export_chip
+
+                if akemi.state_path:
+                    akemi.state.save(akemi.state_path)
+                try:
+                    info = export_chip(
+                        Path(line[6:].strip()), data_dir=akemi.settings.data_dir,
+                        persona_file=akemi.settings.persona_file, owner=akemi.settings.owner_name,
+                        key=akemi.settings.chip_key, memory=akemi.memory,
+                    )
+                    print(info.describe())
+                except (ChipError, OSError) as exc:
+                    print(f"  (não deu: {exc})")
             elif line == "/pausar":
                 akemi.pause.pause("console")
                 print("  (pausada: só responde a você)")

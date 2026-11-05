@@ -87,6 +87,7 @@ akemi-debug = "akemi.debug:main"
 akemi = "akemi.console:main"
 akemi-servidor = "akemi.net.server:main"
 akemi-corpo = "akemi.net.body:main"
+akemi-chip = "akemi.storage.chip:main"
 
 [tool.setuptools.packages.find]
 include = ["akemi*"]

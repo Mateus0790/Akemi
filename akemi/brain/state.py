@@ -21,6 +21,13 @@ logger = structlog.get_logger()
 
 MOODS = ("neutra", "animada", "curiosa", "focada", "entediada", "irritadinha", "sonolenta", "orgulhosa")
 MAX_THOUGHT_CHARS = 240
+SENSE_LABEL = {
+    "voz": "voz",
+    "microfone": "ouve o dono",
+    "tela": "vê a tela",
+    "audio_pc": "ouve o áudio do PC",
+    "acoes": "mexe no PC",
+}
 
 
 def is_repeated(thought: str, previous, threshold: float = 0.55) -> bool:
@@ -59,6 +66,10 @@ class InnerState:
     last_spoke_at: float = 0.0
     last_owner_interaction_at: float = 0.0
     last_updated_at: float = field(default_factory=time.time)
+    # Corpo: onde ela está "encarnada" agora e o que esse corpo deixa ela fazer.
+    body: str = ""
+    senses: list[str] = field(default_factory=list)
+    body_connected: bool = False
 
     # ------------------------------------------------------------------ humor
     def set_mood(self, mood: str, intensity: float = 0.6) -> None:
@@ -116,6 +127,18 @@ class InnerState:
     def touch(self) -> None:
         self.last_updated_at = time.time()
 
+    # ------------------------------------------------------------------ corpo
+    def enter_body(self, name: str, senses: list[str]) -> str:
+        """Liga a um corpo. Devolve o nome do corpo anterior se ela trocou de corpo."""
+        previous = self.body if self.body and self.body != name else ""
+        self.body, self.senses, self.body_connected = name, list(senses), True
+        self.touch()
+        return previous
+
+    def leave_body(self) -> None:
+        self.body_connected = False
+        self.touch()
+
     # ------------------------------------------------------------------ prompt
     def describe(self, now: float | None = None) -> str:
         now = now or time.time()
@@ -123,6 +146,14 @@ class InnerState:
             f"Seu humor agora: {self.mood} (intensidade {self.mood_intensity:.1f}).",
             f"Seu objetivo atual: {self.current_goal}.",
         ]
+        if self.body:
+            if self.body_connected:
+                senses = ", ".join(SENSE_LABEL.get(x, x) for x in self.senses) or "nenhum sentido"
+                lines.append(f"Seu corpo agora: {self.body} ({senses}).")
+            else:
+                lines.append(
+                    f"Você está sem corpo agora (o último foi {self.body}): só pensa e responde o chat."
+                )
         if self.open_tasks:
             lines.append(
                 "Tarefas pendentes: "

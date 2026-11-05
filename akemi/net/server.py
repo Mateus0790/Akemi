@@ -164,6 +164,7 @@ class AkemiServer:
         self.akemi = akemi
         self.link = link
         self._token = token.encode()
+        self.body_name = ""
         akemi.bus.subscribe("speech.finished", self._on_speech_finished)
 
     # ------------------------------------------------------------- eventos
@@ -204,8 +205,30 @@ class AkemiServer:
             else:
                 akemi.pause.resume()
             await self.link.send("paused", paused=akemi.pause.paused)
+        elif kind == "evolucao":
+            await self.link.send("evolucao", texto=await self._evolution(msg))
         else:
             logger.warning("unknown message from body", type=kind)
+
+    async def _evolution(self, msg: dict) -> str:
+        """Pedido do dono (corpo autenticado) sobre a autoevolução."""
+        from akemi.brain.self_improve import EvolutionError
+
+        action, akemi = msg.get("acao"), self.akemi
+        if action not in proto.EVOLUTION_ACTIONS:
+            return "ação inválida"
+        try:
+            if action == "listar":
+                return akemi.evolution.describe()
+            if action == "evoluir":
+                made = await akemi.evolve(force=True)
+                return "\n".join(p.describe() for p in made) or "Nada para mudar agora."
+            pid = msg.get("id")
+            if not isinstance(pid, int):
+                return "informe o número da proposta"
+            return akemi.decide_evolution(action, pid).describe()
+        except (EvolutionError, ValueError) as exc:
+            return f"Não deu: {exc}"
 
     # ---------------------------------------------------------- websocket
     async def handler(self, conn: Any) -> None:
@@ -219,8 +242,13 @@ class AkemiServer:
             await conn.close(proto.CLOSE_UNAUTHORIZED, "token inválido")
             return
         await self.link.attach(conn)
-        logger.info("body connected", remote=str(conn.remote_address))
+        name, senses = proto.body_info(first.get("corpo"))
+        self.body_name = name
+        logger.info("body connected", remote=str(conn.remote_address), body=name, senses=senses)
         await self.link.send("welcome", paused=self.akemi.pause.paused, owner=self.akemi.settings.owner_name)
+        self.akemi.bus.publish(
+            Event("body.connected", {"nome": name, "sentidos": senses}, source="corpo", trust=Trust.SYSTEM)
+        )
         try:
             async for raw in conn:
                 try:
@@ -230,6 +258,8 @@ class AkemiServer:
         except Exception as exc:  # conexão caiu
             logger.info("body connection ended", error=str(exc))
         finally:
+            if self.link.conn is conn:  # um corpo substituído não "desliga" o novo
+                self.akemi.bus.publish(Event("body.disconnected", source="corpo", trust=Trust.SYSTEM))
             self.link.detach(conn)
             logger.info("body disconnected")
 
@@ -238,6 +268,7 @@ class AkemiServer:
         return {
             "ok": True,
             "corpo_conectado": self.link.connected,
+            "corpo": self.body_name if self.link.connected else "",
             "pausada": self.akemi.pause.paused,
             "humor": state.mood,
         }
@@ -285,6 +316,7 @@ def build(settings: Settings, **akemi_kwargs) -> AkemiServer:
     link = BodyLink()
     akemi_kwargs.setdefault("desktop_actions", False)
     akemi = Akemi(settings, tts=RemoteVoice(link), **akemi_kwargs)
+    akemi.local_body = False  # o corpo de verdade se anuncia no hello
     register_remote_actions(akemi.actions, link)
     return AkemiServer(akemi, link, settings.akemi_token)
 

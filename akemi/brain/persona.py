@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -47,6 +47,23 @@ class Persona:
             autonomy=fmt(raw.get("autonomy", "")),
             owner=owner,
             examples=[e for e in fmt(raw.get("examples", []) or []) if isinstance(e, dict)],
+        )
+
+    def with_additions(
+        self,
+        traits: list[str] = (),
+        speech_rules: list[str] = (),
+        examples: list[dict] = (),
+    ) -> "Persona":
+        """Cópia com os traços aprendidos (autoevolução) somados aos originais.
+
+        Só soma: o que está no persona.yaml nunca é apagado nem reescrito.
+        """
+        return replace(
+            self,
+            traits=[*self.traits, *traits],
+            speech_rules=[*self.speech_rules, *speech_rules],
+            examples=[*self.examples, *examples],
         )
 
     def system_prompt(self, *, live: bool = False, extra: str = "") -> str:

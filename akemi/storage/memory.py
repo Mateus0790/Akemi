@@ -112,12 +112,24 @@ class Memory:
             ).fetchall()
         return [Recall(*r) for r in rows]
 
-    def recent(self, limit: int = 10) -> list[Recall]:
+    def recent(self, limit: int = 10, kind: str | None = None, since: float = 0.0) -> list[Recall]:
+        """Últimos episódios (do mais antigo ao mais novo), opcionalmente de um tipo."""
+        sql, args = "SELECT ts, kind, text FROM episodes WHERE ts > ?", [since]
+        if kind:
+            sql += " AND kind = ?"
+            args.append(kind)
         with self._lock:
-            rows = self._db.execute(
-                "SELECT ts, kind, text FROM episodes ORDER BY ts DESC LIMIT ?", (limit,)
-            ).fetchall()
+            rows = self._db.execute(sql + " ORDER BY ts DESC LIMIT ?", (*args, limit)).fetchall()
         return [Recall(*r) for r in reversed(rows)]
+
+    def backup_to(self, path: Path | str) -> None:
+        """Cópia consistente do banco (funciona com ela rodando)."""
+        dest = sqlite3.connect(str(path))
+        try:
+            with self._lock:
+                self._db.backup(dest)
+        finally:
+            dest.close()
 
     def close(self) -> None:
         with self._lock:
