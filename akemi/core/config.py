@@ -93,7 +93,6 @@ class Settings(BaseSettings):
     server_url: str = ""  # onde o corpo acha o núcleo, ex. ws://192.168.0.10:8765
 
     # --- Rede ---
-    hermes_api_url: str = "http://localhost:5000"
     control_api_host: str = "127.0.0.1"
     control_api_port: int = 8765
 
