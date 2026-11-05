@@ -169,7 +169,9 @@ class Akemi:
         )
         self._tasks: list[asyncio.Task] = []
         self.senses = Senses(
-            self.bus, settings, self.speaker, self.pause, vision_fallback=self.models.fast
+            self.bus, settings, self.speaker, self.pause, vision_fallback=self.models.fast,
+            on_voice_problem=lambda why: self.health.report(
+                "reconhecimento_voz", False, why, label="parte que reconhece sua voz"),
         )
 
     # ------------------------------------------------------------ autocura

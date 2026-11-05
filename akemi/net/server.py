@@ -77,6 +77,14 @@ class AkemiServer:
             akemi.bus.publish(
                 Event("owner.speech_started", source="corpo", trust=Trust.OWNER, priority=Priority.URGENT)
             )
+        elif kind == "guest_message":
+            text = msg.get("text", "").strip()
+            who = msg.get("quem") if msg.get("quem") in ("outro", "incerto") else "outro"
+            if text:
+                akemi.bus.publish(Event(
+                    "voice.guest", {"text": text, "quem": who}, source="corpo",
+                    trust=Trust.PUBLIC, priority=Priority.HIGH,
+                ))
         elif kind == "ambient":
             text = msg.get("text", "").strip()
             if msg.get("kind") in proto.AMBIENT_KINDS and text:

@@ -6,6 +6,8 @@ Corpo → núcleo
     ``owner_message``  {text}                 o dono falou/digitou (Trust.OWNER)
     ``owner_speech_started`` {}               o dono começou a falar (interrompe)
     ``ambient``        {kind, text}           tela/áudio do PC (Trust.PUBLIC)
+    ``guest_message``  {text, quem}           alguém falou no mic, mas a voz não é a do
+                                              dono (``quem`` = outro | incerto; Trust.PUBLIC)
     ``spoken``         {id, status}           terminou de falar o ``say`` ``id``
     ``action_result``  {id, status, value, detail}  resultado de um ``action``
     ``pause`` / ``resume`` {}                 liga/desliga a autonomia

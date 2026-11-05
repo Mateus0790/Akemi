@@ -111,6 +111,9 @@ class Settings(BaseSettings):
     wake_words: list[str] = ["akemi"]
     followup_window_s: float = 20.0  # tempo para continuar a conversa sem dizer o nome
     barge_in_rms: float = 1500.0  # volume mínimo para interromper enquanto ela fala
+    # Reconhecer o dono pela voz (docs/VOZ.md). Só vale depois de akemi --cadastrar-voz.
+    voice_id_enabled: bool = True
+    voice_model_path: Path = Path("data/voices/wespeaker_en_voxceleb_resnet34.onnx")
     whisper_model: str = "small"
     stt_language: str = "pt"
 

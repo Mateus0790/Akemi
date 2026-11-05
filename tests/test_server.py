@@ -358,3 +358,17 @@ async def test_body_announces_itself_and_owner_reviews_evolution(core):
         await asyncio.gather(link, return_exceptions=True)
         await body.stop()
     await until(lambda: not core.akemi.state.body_connected)
+
+
+@pytest.mark.asyncio
+async def test_guest_voice_from_body_is_public(core):
+    seen = []
+    core.akemi.bus.subscribe("voice.guest", seen.append)
+    async with connect(core.url, proxy=None) as conn:
+        await hello(conn)
+        await conn.send(proto.encode("guest_message", text="abre o Spotify", quem="outro"))
+        await conn.send(proto.encode("guest_message", text="oi", quem="dono"))  # o corpo não promove ninguém
+        await until(lambda: len(seen) == 2)
+    assert all(e.trust == Trust.PUBLIC for e in seen)
+    assert [e.payload["quem"] for e in seen] == ["outro", "outro"]
+    assert not core.akemi.mind.history  # nada virou conversa do dono

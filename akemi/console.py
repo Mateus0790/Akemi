@@ -6,6 +6,7 @@
     python -m akemi.console --mic      # ouve você pelo microfone (diga "Akemi, ...")
     python -m akemi.console --tela     # olha a tela (OCR + modelo de visão opcional)
     python -m akemi.console --celular  # deixa o app do celular conectar (precisa de AKEMI_TOKEN)
+    python -m akemi.console --cadastrar-voz   # ela aprende a reconhecer a sua voz
 
 Comandos:
     /chat <nick> <mensagem>   simula uma mensagem do chat da live
@@ -17,6 +18,7 @@ Comandos:
     /saude                    como ela está por dentro (cérebro em uso, voz, autocura)
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
+    /voz                      reconhecimento da sua voz: cadastro, limites, quem ela ouviu
     /evolucao                 o que ela mudou em si (e o que está pendente)
     /evoluir                  pede para ela revisar as conversas agora
     /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
@@ -132,6 +134,14 @@ async def run(
                 print(akemi.state.describe())
             elif line == "/saude":
                 print(akemi.describe_health())
+            elif line == "/voz":
+                vid = akemi.senses.voice_id
+                if vid is not None:
+                    print(vid.describe())
+                elif not akemi.settings.mic_enabled:
+                    print("  (microfone desligado: rode com --mic)")
+                else:
+                    print("  voz não cadastrada: tudo no microfone vale como você. Use akemi --cadastrar-voz")
             elif line == "/corpo":
                 st = akemi.state
                 print(f"  corpo: {st.body or '—'} | sentidos: {', '.join(st.senses) or 'nenhum'}")
@@ -191,8 +201,27 @@ def main() -> None:
     parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--celular", action="store_true", help="deixa o app do celular conectar")
+    parser.add_argument("--cadastrar-voz", action="store_true", help="ela aprende a reconhecer a sua voz")
+    parser.add_argument("--esquecer-voz", action="store_true", help="apaga o cadastro da sua voz")
     parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")
     args = parser.parse_args()
+    if args.cadastrar_voz or args.esquecer_voz:
+        from akemi.audio.voice_id import VOICE_FILE
+
+        settings = Settings()
+        if args.esquecer_voz:
+            path = settings.data_dir / VOICE_FILE
+            if path.exists():
+                path.unlink()
+                print(f"Cadastro da voz apagado ({path}). O microfone volta a valer como você.")
+            else:
+                print("Não tinha voz cadastrada.")
+            return
+        from akemi.audio.enroll import run_enrollment
+
+        raise SystemExit(asyncio.run(run_enrollment(
+            settings.data_dir, settings.voice_model_path, settings.mic_device, settings.vad_aggressiveness,
+        )))
     if args.listar_mics:
         from akemi.audio.mic import MicCapture
 

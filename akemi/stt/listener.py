@@ -10,6 +10,7 @@ As duas classes não sabem de onde vêm os frames; recebem 20 ms de PCM16 mono
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol
@@ -19,6 +20,8 @@ import structlog
 
 from akemi.core.events import Event, EventBus, Priority, Trust
 from akemi.core.pause import PauseSwitch
+
+from akemi.audio.voice_id import VoiceID
 
 from .filters import contains_wake_word, is_bare_wake_word, is_echo, is_hallucination
 from .transcriber import SpeechSegmenter
@@ -60,8 +63,11 @@ class OwnerVoiceInput:
         end_silence_ms: int = 700,
         min_avg_logprob: float = -0.8,
         max_no_speech_prob: float = 0.5,
+        voice_id: VoiceID | None = None,
     ) -> None:
         self.bus = bus
+        # Com a voz cadastrada, cada frase é conferida antes de valer como do dono.
+        self.voice_id = voice_id
         # Sem o nome dela, só aceita o que o Whisper ouviu com segurança;
         # e nunca aceita o que ele acha que nem é fala.
         self.min_avg_logprob = min_avg_logprob
@@ -156,6 +162,21 @@ class OwnerVoiceInput:
             )
             self.bus.publish(Event("owner.wake", source="mic", trust=Trust.OWNER, priority=Priority.HIGH))
             return None
+        if self.voice_id is not None:
+            verdict = await asyncio.to_thread(self.voice_id.verify, segment, now)
+            if verdict.who != "dono":
+                # Não é você (ou não deu para ter certeza): vira conversa de visita,
+                # sem confiança de dono. Interromper ela, qualquer um pode.
+                logger.info("voice not recognized", who=verdict.who, text=text)
+                self.bus.publish(
+                    Event("owner.speech_started", source="mic", trust=Trust.PUBLIC, priority=Priority.URGENT)
+                )
+                self.bus.publish(Event(
+                    "voice.guest",
+                    {"text": text, "quem": verdict.who, "nota": verdict.score, "motivo": verdict.reason},
+                    source="mic", trust=Trust.PUBLIC, priority=Priority.HIGH,
+                ))
+                return text
         logger.info("owner said", text=text)
         self.bus.publish(
             Event("owner.speech_started", source="mic", trust=Trust.OWNER, priority=Priority.URGENT)

@@ -49,6 +49,8 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   - vontade própria: gostos, opiniões, vontades e objetivos que ela forma sozinha
   - iniciativa estilo J.A.R.V.I.S.: faz ações seguras por conta própria e te conta
 
+- **Reconhece a sua voz** ([docs/VOZ.md](docs/VOZ.md)): `akemi --cadastrar-voz`. Outra
+  pessoa no microfone conversa com ela, mas não manda nela
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
 
@@ -86,6 +88,7 @@ Comandos no console:
 | `/pensar` | força um momento de pensamento |
 | `/estado` | mostra humor, objetivo, tarefas, gostos e opiniões |
 | `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
+| `/voz` | reconhecimento da sua voz: cadastro e quem ela ouviu |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
