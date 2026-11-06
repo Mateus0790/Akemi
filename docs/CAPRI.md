@@ -8,7 +8,7 @@ próprio da Akemi**.
 
 | Ideia do Capri | Na Akemi | Onde |
 |---|---|---|
-| Desktop pet que senta nas janelas | Avatar de desktop (`akemi --avatar`) | `akemi/avatar/` |
+| Desktop pet que senta nas janelas | Avatar de desktop (**desativado por enquanto**) | `akemi/avatar/` |
 | Code/Husk Mode | Modo Casca (`akemi --casca claude`) | `akemi/casca/` |
 | Lembretes em datas | `lembrete` com `quando` ("dia 5 de dezembro às 9h") | `akemi/actions/reminders.py`, `when.py` |
 | Lookout ("me avisa quando...") | Vigia da tela (`vigiar_tela`) | `akemi/actions/lookout.py` |
@@ -23,14 +23,14 @@ de funcionamento, que foram reimplementadas aqui. O desenho da Akemi é original
 
 Valeu, Capri, pela inspiração.
 
-## Avatar de desktop
+## Avatar de desktop (desativado por enquanto)
 
-```powershell
-akemi --avatar            # ou AVATAR_ENABLED=true no .env
-akemi-corpo --avatar      # no modo servidor + PC, o avatar fica no PC
-```
+O código está pronto em `akemi/avatar/`, mas o avatar fica **desligado** até ser
+testado no Windows: a Akemi não abre o avatar sozinha, e não há mais `--avatar`
+nem `/avatar`. Para experimentar mesmo assim, coloque `AVATAR_ENABLED=true` no
+`.env` (vale para `akemi` e para `akemi-corpo`).
 
-Ela aparece num canto da tela, por cima de tudo, e:
+Quando ligado, ela aparece num canto da tela, por cima de tudo, e:
 
 - **senta no topo da janela em foco** e vai junto quando você troca de janela
   (de longe, ela "teleporta" com uma falhada)
@@ -69,15 +69,15 @@ está acontecendo.
 ```powershell
 akemi --casca claude     # ou codex, ou ambos
 # reinicie o Claude Code / Codex (no Codex, aceite os hooks quando ele perguntar)
-akemi --avatar           # a Akemi, como sempre
+akemi                    # a Akemi, como sempre
 akemi --casca desligar   # tira só os hooks dela
 ```
 
 | Quando o assistente... | Ela... |
 |---|---|
 | recebe seu pedido | "O Claude já tá nessa." |
-| lê, edita, roda ou procura | legenda no avatar: "Editando mind.py", "Rodando pytest -q" |
-| tropeça num erro | "O Claude tropeçou num erro." (e o avatar se assusta) |
+| lê, edita, roda ou procura | anota sem falar ("Editando mind.py", "Rodando pytest -q"); aparece no `/casca` |
+| tropeça num erro | "O Claude tropeçou num erro." |
 | precisa do seu OK | **fala**: "O Claude precisa do seu OK. Quer usar Bash." |
 | termina | **fala** a primeira frase da resposta: "O Claude terminou: arrumei o teste." |
 | para com erro | **fala**: "O Claude parou com um erro." |
@@ -90,7 +90,8 @@ akemi --casca desligar   # tira só os hooks dela
   mostra o mesmo no console.
 - `CASCA_VOZ`: `importante` (padrão; fala só quando pedem seu OK, terminam ou
   dão erro), `tudo` (fala também quando começam e quando tropeçam) ou `nada`
-  (só legenda no avatar). Pausada (`/pausar`), ela não fala nada disso.
+  (não fala, mas continua sabendo de tudo e mostra no `/casca`). Pausada
+  (`/pausar`), ela não fala nada disso.
 - `CASCA=desligado` desliga sem tirar os hooks. `CASCA=auto` (padrão) usa o que
   você ligou com `akemi --casca`.
 

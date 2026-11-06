@@ -57,12 +57,13 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
 
 - **Ideias do [Capri](https://github.com/lachydotmcg/capri-desktop)** ([docs/CAPRI.md](docs/CAPRI.md)):
-  - **avatar de desktop** (`akemi --avatar`): ela senta nas suas janelas, mexe a boca
-    quando fala, muda de cara com o humor, cochila e gosta de carinho na cabeça
   - **Modo Casca** (`akemi --casca claude`): ela vira o corpo do Claude Code e do Codex
     enquanto eles trabalham e avisa quando pedem seu OK ou terminam
   - **lembretes com data** ("dia 5 de dezembro às 9h") que sobrevivem a um reinício
   - **vigia da tela**: "me avisa quando aparecer download concluído"
+
+**Ainda falta:** avatar. Um avatar de desktop já está no código (`akemi/avatar/`),
+mas fica desativado por enquanto ([docs/CAPRI.md](docs/CAPRI.md#avatar-de-desktop-desativado-por-enquanto)).
 
 ## Instalação
 
@@ -104,7 +105,6 @@ Comandos no console:
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
 | `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
 | `/chip <arquivo>` | grava a identidade dela num chip |
-| `/avatar` | abre o avatar de desktop (ou comece com `akemi --avatar`) |
 | `/casca` | o que o Claude Code/Codex estão fazendo ([docs/CAPRI.md](docs/CAPRI.md)) |
 | `/lembretes`, `/vigias` | lembretes pendentes; o que ela está vigiando na tela |
 
@@ -305,17 +305,15 @@ código numa cópia isolada, roda os testes e abre um PR como rascunho para voc�
 revisar. Ela nunca faz merge, não mexe nos arquivos de segurança e fica
 desligada até você configurar um token. Veja [docs/OFICINA.md](docs/OFICINA.md).
 
-## Avatar e Modo Casca
+## Modo Casca
 
 ```powershell
-akemi --avatar             # ela sentada nas suas janelas
 akemi --casca claude       # ela vira o corpo do Claude Code (codex | ambos | desligar)
 ```
 
-O avatar usa só o `tkinter` do Python; a transparência e o "sentar na janela"
-são do Windows. O Modo Casca liga hooks no Claude Code/Codex sem mexer nos seus
-outros hooks, escuta só em 127.0.0.1 com token e nunca aprova nada por você.
-Detalhes, skins e segurança em [docs/CAPRI.md](docs/CAPRI.md).
+O Modo Casca liga hooks no Claude Code/Codex sem mexer nos seus outros hooks,
+escuta só em 127.0.0.1 com token e nunca aprova nada por você. Detalhes e
+segurança em [docs/CAPRI.md](docs/CAPRI.md).
 
 ## Contribuindo
 
@@ -325,6 +323,6 @@ Veja [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Apache 2.0 — veja [LICENSE](LICENSE).
 
-O avatar, o Modo Casca, os lembretes com data e o vigia da tela foram inspirados
+O Modo Casca, os lembretes com data, o vigia da tela e o avatar (ainda desativado) foram inspirados
 no [Capri](https://github.com/lachydotmcg/capri-desktop) e reescritos do zero:
 nenhum código ou arte dele foi copiado (o Capri usa uma licença não comercial).

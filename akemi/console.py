@@ -7,7 +7,6 @@
     python -m akemi.console --tela     # olha a tela (OCR + modelo de visão opcional)
     python -m akemi.console --celular  # deixa o app do celular conectar (precisa de AKEMI_TOKEN)
     python -m akemi.console --cadastrar-voz   # ela aprende a reconhecer a sua voz
-    python -m akemi.console --avatar   # ela aparece sentada nas suas janelas
     python -m akemi.console --casca claude    # liga o Modo Casca (claude|codex|ambos|desligar)
 
 Comandos:
@@ -30,7 +29,6 @@ Comandos:
     /casca                    o que o Claude Code/Codex estão fazendo (Modo Casca)
     /lembretes                os lembretes pendentes
     /vigias                   o que ela está vigiando na tela
-    /avatar                   abre o avatar de desktop
     /sair
 """
 
@@ -87,12 +85,9 @@ async def start_phone(akemi: Akemi):
 
 
 async def run(
-    echo: bool, voice: bool = False, mic: bool = False, screen: bool = False, phone: bool = False,
-    avatar: bool = False,
+    echo: bool, voice: bool = False, mic: bool = False, screen: bool = False, phone: bool = False
 ) -> None:
     settings = Settings()
-    if avatar:
-        settings.avatar_enabled = True
     if voice:
         if settings.tts_engine == "console":  # TTS_ENGINE do .env escolhe a voz
             settings.tts_engine = "piper"
@@ -212,9 +207,6 @@ async def run(
                 print("\n".join(f"  #{r.id} {r.describe()}" for r in items) or "  (nenhum lembrete)")
             elif line == "/vigias":
                 print("  " + akemi.lookout.describe())
-            elif line == "/avatar":
-                why = akemi.start_avatar()
-                print(f"  (avatar não abriu: {why})" if why else "  (avatar aberto)")
             elif line == "/pausar":
                 akemi.pause.pause("console")
                 print("  (pausada: só responde a você)")
@@ -240,7 +232,6 @@ def main() -> None:
     parser.add_argument("--cadastrar-voz", action="store_true", help="ela aprende a reconhecer a sua voz")
     parser.add_argument("--esquecer-voz", action="store_true", help="apaga o cadastro da sua voz")
     parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")
-    parser.add_argument("--avatar", action="store_true", help="mostra a Akemi sentada nas suas janelas")
     parser.add_argument("--casca", choices=["claude", "codex", "ambos", "desligar"],
                         help="liga o Modo Casca: ela vira o corpo do Claude Code/Codex (e sai)")
     args = parser.parse_args()
@@ -287,7 +278,7 @@ def main() -> None:
         except Exception:
             pass
     try:
-        asyncio.run(run(args.echo, args.voz, args.mic, args.tela, args.celular, args.avatar))
+        asyncio.run(run(args.echo, args.voz, args.mic, args.tela, args.celular))
     except KeyboardInterrupt:
         pass
 

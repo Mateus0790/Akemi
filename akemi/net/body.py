@@ -2,7 +2,7 @@
 
 O corpo não pensa. Ele ouve (microfone, áudio do PC), vê (tela) e fala (Piper):
 
-    akemi-corpo --servidor ws://192.168.0.10:8765 --voz --mic --tela --avatar
+    akemi-corpo --servidor ws://192.168.0.10:8765 --voz --mic --tela
 
 Tudo que os sentidos percebem vai para o núcleo; o que o núcleo manda falar
 toca aqui. Se a conexão cai, ele tenta de novo sozinho.
@@ -415,7 +415,6 @@ def main() -> None:
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--audio-pc", action="store_true", help="ouve o áudio do PC")
     parser.add_argument("--sem-terminal", action="store_true", help="não lê comandos do teclado")
-    parser.add_argument("--avatar", action="store_true", help="mostra a Akemi sentada nas suas janelas")
     args = parser.parse_args()
 
     settings = Settings()
@@ -425,7 +424,6 @@ def main() -> None:
     settings.mic_enabled |= args.mic
     settings.screen_enabled |= args.tela
     settings.system_audio_enabled |= args.audio_pc
-    settings.avatar_enabled |= args.avatar
     url = args.servidor or settings.server_url
     if not url:
         parser.error("informe --servidor ou SERVER_URL no .env")

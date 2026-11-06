@@ -145,11 +145,11 @@ class Settings(BaseSettings):
     # --- Modo Casca: ela vira o corpo do Claude Code e do Codex (docs/CAPRI.md) ---
     # auto = o que você ligou com "akemi --casca claude|codex|ambos"
     casca: Literal["auto", "claude", "codex", "ambos", "desligado"] = "auto"
-    # nada = só legenda no avatar; importante = fala quando pedem seu OK, terminam ou dão erro
+    # nada = não fala (veja com /casca); importante = fala quando pedem seu OK, terminam ou dão erro
     casca_voz: Literal["nada", "importante", "tudo"] = "importante"
 
-    # --- Avatar de desktop (docs/CAPRI.md) ---
-    avatar_enabled: bool = False  # ou akemi --avatar
+    # --- Avatar de desktop (docs/CAPRI.md): desativado por enquanto ---
+    avatar_enabled: bool = False  # experimental: só liga com AVATAR_ENABLED=true
     avatar_scale: float = 1.0  # 0.5 a 3
     avatar_skin: Path | None = None  # pasta com parado.png, piscando.png, falando.png...
     avatar_perch: bool = True  # senta no topo da janela em foco (Windows)

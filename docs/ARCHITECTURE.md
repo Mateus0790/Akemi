@@ -42,7 +42,7 @@ VTuber de IA.
 | `brain/self_improve.py` | Autoevolução: propostas de mudança na persona, aprovadas pelo dono ([CAPRICORNIO.md](CAPRICORNIO.md)). |
 | `storage/chip.py` | Chip de identidade: exporta/importa persona, estado, memória e evolução (`akemi-chip`). |
 | `tts/base.py` | `Speaker`: único caminho para falar; interrompe quando o dono começa a falar. |
-| `avatar/` | Avatar de desktop: janela Tk transparente que senta nas janelas, reage a `speech.*`, `casca.*` e ao humor ([CAPRI.md](CAPRI.md)). |
+| `avatar/` | Avatar de desktop (desativado por enquanto): janela Tk transparente que senta nas janelas, reage a `speech.*`, `casca.*` e ao humor ([CAPRI.md](CAPRI.md)). |
 | `casca/` | Modo Casca: hooks do Claude Code/Codex → `127.0.0.1` com token → `casca.*` (`Trust.PUBLIC`) e falas ([CAPRI.md](CAPRI.md)). |
 | `actions/when.py` | Entende "amanhã às 9h", "dia 5 de dezembro" para os lembretes (salvos em `data/lembretes.json`). |
 | `actions/lookout.py` | Vigia da tela: confere `ambient.screen` contra frases que o dono pediu. |
@@ -143,6 +143,7 @@ async def tocar_musica(nome: str) -> str:
 4. ~~Servidor 24h~~ — núcleo (`net/server.py`, Docker) + corpo (`net/body.py`, PC)
    ligados por WebSocket na LAN. Ver "Núcleo e corpo" acima.
 5. Busca semântica (embeddings) na memória.
-6. ~~Avatar~~ — avatar de desktop (`avatar/`), com a boca seguindo `speech.started`/`finished`
-   e a cara seguindo o humor. Falta ainda: VTube Studio para a live.
+6. Avatar — o avatar de desktop (`avatar/`) está pronto no código, com a boca seguindo
+   `speech.started`/`finished` e a cara seguindo o humor, mas desativado por enquanto
+   (falta testar no Windows). Depois: VTube Studio para a live.
 7. Self-improve por último.
