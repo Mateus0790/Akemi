@@ -2,7 +2,7 @@
 
 O corpo não pensa. Ele ouve (microfone, áudio do PC), vê (tela) e fala (Piper):
 
-    akemi-corpo --servidor ws://192.168.0.10:8765 --voz --mic --tela
+    akemi-corpo --servidor ws://192.168.0.10:8765 --voz --mic --tela --avatar
 
 Tudo que os sentidos percebem vai para o núcleo; o que o núcleo manda falar
 toca aqui. Se a conexão cai, ele tenta de novo sozinho.
@@ -55,9 +55,10 @@ class BodyVoice:
     o áudio do PC não é transcrito e o microfone ignora o eco da voz dela.
     """
 
-    def __init__(self, engine: TTSEngine, on_spoken: OnSpoken) -> None:
+    def __init__(self, engine: TTSEngine, on_spoken: OnSpoken, bus: EventBus | None = None) -> None:
         self.engine = engine
         self.on_spoken = on_spoken
+        self.bus = bus  # speech.started/finished no barramento do corpo (para o avatar)
         self._queue: asyncio.Queue[tuple[int, str]] = asyncio.Queue()
         self._recent: deque[tuple[float, str]] = deque(maxlen=10)
         self._current: asyncio.Task | None = None
@@ -87,6 +88,8 @@ class BodyVoice:
         while True:
             sid, text = await self._queue.get()
             self._recent.append((time.time(), text))
+            if self.bus is not None:
+                self.bus.publish(Event("speech.started", {"text": text}, source="body-voice"))
             self._current = asyncio.create_task(self.engine.speak(text))
             status = "done"
             try:
@@ -100,6 +103,8 @@ class BodyVoice:
                 status = "error"
                 logger.exception("tts failed")
             self._recent.append((time.time(), text))  # fim da fala (janela de eco)
+            if self.bus is not None:
+                self.bus.publish(Event("speech.finished", {"text": text, "status": status}, source="body-voice"))
             await self._notify(sid, status)
 
     @property
@@ -152,7 +157,8 @@ class Body:
         self.name = default_body_name(settings)
         self.bus = EventBus()
         self.pause = PauseSwitch()
-        self.voice = BodyVoice(engine, self._on_spoken)
+        self.voice = BodyVoice(engine, self._on_spoken, self.bus)
+        self.avatar = None
         self.senses = Senses(self.bus, settings, self.voice, self.pause)
         self.conn: Any = None
         self.connected = asyncio.Event()
@@ -299,10 +305,35 @@ class Body:
                 self.voice.engine = ConsoleTTS()
         self._tasks += [self.bus.start(), self.voice.start()]
         self.senses.start()
+        if self.settings.avatar_enabled:
+            if why := self.start_avatar():
+                print(f"  (avatar desligado: {why})")
+
+    def start_avatar(self) -> str | None:
+        """O avatar de desktop no PC. O humor fica no núcleo; aqui ela reage à fala."""
+        from akemi.avatar.bridge import AvatarBridge
+        from akemi.avatar.window import AvatarWindow
+
+        s = self.settings
+        window = AvatarWindow(scale=s.avatar_scale, skin=s.avatar_skin, perch_on_windows=s.avatar_perch,
+                              sleep_after_s=s.avatar_sleep_after_s)
+
+        async def toggle_pause() -> None:
+            await self.send("resume" if self.pause.paused else "pause")
+
+        bridge = AvatarBridge(self.bus, window,
+                              on_menu=lambda what: asyncio.ensure_future(toggle_pause()) if what == "pausar" else None)
+        if not window.start():
+            return window.error or "não abriu"
+        bridge.register()
+        self.avatar = window
+        return None
 
     async def stop(self) -> None:
         await self.senses.stop()
         await self.voice.stop()
+        if self.avatar is not None:
+            self.avatar.stop()
         for t in [*self._tasks, *self._action_tasks]:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -384,6 +415,7 @@ def main() -> None:
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--audio-pc", action="store_true", help="ouve o áudio do PC")
     parser.add_argument("--sem-terminal", action="store_true", help="não lê comandos do teclado")
+    parser.add_argument("--avatar", action="store_true", help="mostra a Akemi sentada nas suas janelas")
     args = parser.parse_args()
 
     settings = Settings()
@@ -393,6 +425,7 @@ def main() -> None:
     settings.mic_enabled |= args.mic
     settings.screen_enabled |= args.tela
     settings.system_audio_enabled |= args.audio_pc
+    settings.avatar_enabled |= args.avatar
     url = args.servidor or settings.server_url
     if not url:
         parser.error("informe --servidor ou SERVER_URL no .env")

@@ -7,6 +7,8 @@
     python -m akemi.console --tela     # olha a tela (OCR + modelo de visão opcional)
     python -m akemi.console --celular  # deixa o app do celular conectar (precisa de AKEMI_TOKEN)
     python -m akemi.console --cadastrar-voz   # ela aprende a reconhecer a sua voz
+    python -m akemi.console --avatar   # ela aparece sentada nas suas janelas
+    python -m akemi.console --casca claude    # liga o Modo Casca (claude|codex|ambos|desligar)
 
 Comandos:
     /chat <nick> <mensagem>   simula uma mensagem do chat da live
@@ -25,6 +27,10 @@ Comandos:
     /evoluir                  pede para ela revisar as conversas agora
     /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
     /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
+    /casca                    o que o Claude Code/Codex estão fazendo (Modo Casca)
+    /lembretes                os lembretes pendentes
+    /vigias                   o que ela está vigiando na tela
+    /avatar                   abre o avatar de desktop
     /sair
 """
 
@@ -81,9 +87,12 @@ async def start_phone(akemi: Akemi):
 
 
 async def run(
-    echo: bool, voice: bool = False, mic: bool = False, screen: bool = False, phone: bool = False
+    echo: bool, voice: bool = False, mic: bool = False, screen: bool = False, phone: bool = False,
+    avatar: bool = False,
 ) -> None:
     settings = Settings()
+    if avatar:
+        settings.avatar_enabled = True
     if voice:
         if settings.tts_engine == "console":  # TTS_ENGINE do .env escolhe a voz
             settings.tts_engine = "piper"
@@ -98,6 +107,10 @@ async def run(
     akemi = Akemi(settings)
     await akemi.start()
     phone_ws = await start_phone(akemi) if phone else None
+    if settings.avatar_enabled and akemi.avatar is None:
+        print("  (avatar desligado: precisa do tkinter e de uma tela; veja docs/CAPRI.md)")
+    if akemi.casca_listener is not None:
+        print(f"  🤖 Modo Casca: acompanhando {', '.join(sorted(akemi.casca.sources))}")
     print("Akemi no console. Digite /sair para encerrar, /ajuda para comandos.\n")
     try:
         while True:
@@ -189,6 +202,19 @@ async def run(
                     print(info.describe())
                 except (ChipError, OSError) as exc:
                     print(f"  (não deu: {exc})")
+            elif line == "/casca":
+                if akemi.casca is None:
+                    print("  (Modo Casca desligado: akemi --casca claude|codex|ambos)")
+                else:
+                    print(akemi.casca.describe())
+            elif line == "/lembretes":
+                items = akemi.reminders.pending
+                print("\n".join(f"  #{r.id} {r.describe()}" for r in items) or "  (nenhum lembrete)")
+            elif line == "/vigias":
+                print("  " + akemi.lookout.describe())
+            elif line == "/avatar":
+                why = akemi.start_avatar()
+                print(f"  (avatar não abriu: {why})" if why else "  (avatar aberto)")
             elif line == "/pausar":
                 akemi.pause.pause("console")
                 print("  (pausada: só responde a você)")
@@ -214,7 +240,25 @@ def main() -> None:
     parser.add_argument("--cadastrar-voz", action="store_true", help="ela aprende a reconhecer a sua voz")
     parser.add_argument("--esquecer-voz", action="store_true", help="apaga o cadastro da sua voz")
     parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")
+    parser.add_argument("--avatar", action="store_true", help="mostra a Akemi sentada nas suas janelas")
+    parser.add_argument("--casca", choices=["claude", "codex", "ambos", "desligar"],
+                        help="liga o Modo Casca: ela vira o corpo do Claude Code/Codex (e sai)")
     args = parser.parse_args()
+    if args.casca:
+        from akemi.casca.install import HookError, configure, save_mode
+
+        settings = Settings()
+        try:
+            for msg in configure(args.casca):
+                print(msg)
+        except HookError as exc:
+            raise SystemExit(f"Não deu: {exc}") from exc
+        save_mode(settings.data_dir, args.casca)
+        if args.casca == "desligar":
+            print("Modo Casca desligado.")
+        else:
+            print("Pronto. Agora é só abrir a Akemi (akemi) e usar o assistente normalmente.")
+        return
     if args.cadastrar_voz or args.esquecer_voz:
         from akemi.audio.voice_id import VOICE_FILE
 
@@ -243,7 +287,7 @@ def main() -> None:
         except Exception:
             pass
     try:
-        asyncio.run(run(args.echo, args.voz, args.mic, args.tela, args.celular))
+        asyncio.run(run(args.echo, args.voz, args.mic, args.tela, args.celular, args.avatar))
     except KeyboardInterrupt:
         pass
 

@@ -168,6 +168,8 @@ class Mind:
         self.max_quiet_s = 1800.0  # mesmo sem novidade, pensa de vez em quando
         # Olhar a tela na hora (definido quando a visão está ligada).
         self.look: Callable[[], Awaitable[str | None]] | None = None
+        # Mais contexto para o prompt (ex.: o que o Claude Code está fazendo, no Modo Casca).
+        self.context_providers: list[Callable[[], str]] = []
         self._owner_lock = asyncio.Lock()
         self._live_lock = asyncio.Lock()
         self._guest_lock = asyncio.Lock()
@@ -298,6 +300,12 @@ class Mind:
             )
         if self.health is not None and (inside := self.health.describe_for_prompt()):
             parts.append(inside)
+        for provider in self.context_providers:
+            try:
+                if extra := provider():
+                    parts.append(extra)
+            except Exception:  # contexto extra nunca derruba a resposta
+                logger.exception("context provider failed")
         if include_actions:
             if desc := self.actions.describe_for_prompt():
                 parts.append(desc)
