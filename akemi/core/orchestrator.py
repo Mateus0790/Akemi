@@ -160,6 +160,7 @@ class Akemi:
             on_result=self._game_result, wake_words=settings.wake_words,
         )
         register_game_actions(self.actions, self.arcade)
+        self.clipper = self._build_clipper()
         self.allow_initiative()
 
         self.persist = persist
@@ -193,6 +194,8 @@ class Akemi:
             self.mind.direct_request = parse_request
         # O jogo aberto vem antes: "5" é jogada, não pedido para o modelo.
         self.mind.shortcuts += [self.arcade.shortcut, self.routines.shortcut]
+        if self.clipper is not None:
+            self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
         self.mind.context_providers.append(self.arcade.describe_for_prompt)
         engine = tts or build_tts(settings)
         if isinstance(engine, ResilientTTS) and engine.on_health is None:
@@ -215,6 +218,16 @@ class Akemi:
         self.casca_listener = None
         self.avatar = None
         self._pat_said_at = -1e9
+
+    def _build_clipper(self):
+        if not self.settings.obs_enabled:
+            return None
+        from akemi.actions.obs import Clipper, OBSClient, register_obs_actions
+
+        s = self.settings
+        clipper = Clipper(OBSClient(s.obs_url, s.obs_password), autostart=s.obs_replay_autostart)
+        register_obs_actions(self.actions, clipper)
+        return clipper
 
     def _game_result(self, title: str, winner: str) -> None:
         what = {"dono": f"{self.settings.owner_name} ganhou", "akemi": "você ganhou", "empate": "empatou"}[winner]

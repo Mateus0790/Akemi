@@ -148,6 +148,12 @@ class Settings(BaseSettings):
     # nada = não fala (veja com /casca); importante = fala quando pedem seu OK, terminam ou dão erro
     casca_voz: Literal["nada", "importante", "tudo"] = "importante"
 
+    # --- Clipes pelo OBS: "clipa isso" salva o replay buffer (docs/CAPRI.md) ---
+    obs_enabled: bool = False
+    obs_url: str = "ws://127.0.0.1:4455"  # obs-websocket 5 (OBS 28+)
+    obs_password: str = ""  # Ferramentas > Configurações do Servidor WebSocket
+    obs_replay_autostart: bool = True  # liga o replay buffer se estiver desligado
+
     # --- Avatar de desktop (docs/CAPRI.md): desativado por enquanto ---
     avatar_enabled: bool = False  # experimental: só liga com AVATAR_ENABLED=true
     avatar_scale: float = 1.0  # 0.5 a 3
