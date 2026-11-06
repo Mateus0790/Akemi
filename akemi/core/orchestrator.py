@@ -24,6 +24,7 @@ from akemi.brain.providers.base import Message
 from akemi.brain.self_improve import Evolution, Proposal
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
+from akemi.chamada import CallMode, register_call_actions
 from akemi.core.config import Settings
 from akemi.core.events import Event, EventBus, Priority, Trust
 from akemi.core.health import Health, ResilientTTS, supervise
@@ -70,41 +71,59 @@ def local_senses(settings: Settings, tts: TTSEngine, desktop_actions: bool) -> l
         senses.append("audio_pc")
     if desktop_actions:
         senses.append("acoes")
+    if getattr(tts, "call_mirror", None) is not None:
+        senses.append("chamada")  # a voz dela pode ir para o cabo virtual
     return senses
 
 
+def _device(name: str | None) -> str | int | None:
+    name = (name or "").strip() or None
+    return int(name) if name is not None and name.isdigit() else name
+
+
 def build_tts(settings: Settings) -> TTSEngine:
+    """A voz dela. Com ``CALL_OUTPUT_DEVICE``, o resultado tem ``call_mirror`` (modo chamada)."""
     if settings.tts_engine == "console":
         return ConsoleTTS()
-    from akemi.tts.piper_engine import SoundDevicePlayer
-
-    device = settings.tts_output_device or None
-    if device is not None and device.isdigit():
-        device = int(device)
     try:
-        player = SoundDevicePlayer(device) if device is not None else None
-        if settings.tts_engine == "kokoro":
-            from akemi.tts.kokoro_engine import KokoroTTS
-
-            return ResilientTTS(KokoroTTS(
-                settings.kokoro_model_path,
-                settings.kokoro_voices_path,
-                voice=settings.kokoro_voice,
-                speed=settings.kokoro_speed,
-                player=player,
-            ))
-        from akemi.tts.piper_engine import PiperTTS
-
-        return ResilientTTS(PiperTTS(
-            settings.piper_model_path,
-            speaker_id=settings.piper_speaker_id,
-            length_scale=settings.piper_length_scale,
-            volume=settings.piper_volume,
-            player=player,
-        ))
+        engine, mirror = _build_voice(settings)
     except RuntimeError as exc:
         logger.error("tts unavailable, falling back to console", engine=settings.tts_engine, error=str(exc))
-    return ConsoleTTS()
+        return ConsoleTTS()
+    engine.call_mirror = mirror  # type: ignore[attr-defined]
+    return engine
+
+
+def _build_voice(settings: Settings):
+    from akemi.tts.piper_engine import SoundDevicePlayer
+
+    device = _device(settings.tts_output_device)
+    call_device = _device(settings.call_output_device)
+    player = SoundDevicePlayer(device) if device is not None else None
+    mirror = None
+    if call_device is not None:
+        from akemi.tts.mirror import CallMirrorPlayer
+
+        mirror = player = CallMirrorPlayer(player or SoundDevicePlayer(None), call_device)
+    if settings.tts_engine == "kokoro":
+        from akemi.tts.kokoro_engine import KokoroTTS
+
+        return ResilientTTS(KokoroTTS(
+            settings.kokoro_model_path,
+            settings.kokoro_voices_path,
+            voice=settings.kokoro_voice,
+            speed=settings.kokoro_speed,
+            player=player,
+        )), mirror
+    from akemi.tts.piper_engine import PiperTTS
+
+    return ResilientTTS(PiperTTS(
+        settings.piper_model_path,
+        speaker_id=settings.piper_speaker_id,
+        length_scale=settings.piper_length_scale,
+        volume=settings.piper_volume,
+        player=player,
+    )), mirror
 
 
 class Akemi:
@@ -161,6 +180,14 @@ class Akemi:
         )
         register_game_actions(self.actions, self.arcade)
         self.clipper = self._build_clipper()
+        s = settings
+        self.call = CallMode(
+            self.bus, owner=s.owner_name, wake_words=s.wake_words, friends_can_ask=s.call_friends_can_ask,
+            friend_actions=s.call_friend_actions, announce=s.call_announce,
+            can_speak=self._call_can_speak,
+            can_hear=lambda: self.settings.system_audio_enabled or "audio_pc" in self.state.senses,
+        )
+        register_call_actions(self.actions, self.call)
         self.allow_initiative()
 
         self.persist = persist
@@ -193,10 +220,13 @@ class Akemi:
         if self.files is not None:
             self.mind.direct_request = parse_request
         # O jogo aberto vem antes: "5" é jogada, não pedido para o modelo.
-        self.mind.shortcuts += [self.arcade.shortcut, self.routines.shortcut]
+        self.mind.shortcuts += [self.call.shortcut, self.arcade.shortcut, self.routines.shortcut]
         if self.clipper is not None:
             self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
-        self.mind.context_providers.append(self.arcade.describe_for_prompt)
+        self.mind.context_providers += [self.arcade.describe_for_prompt, self.call.describe_for_prompt]
+        self.mind.ambient_filters.append(self.call.swallow_ambient)
+        self.mind.owner_filters.append(self.call.mic_echo)
+        self.call.on_change.append(self._call_audio)
         engine = tts or build_tts(settings)
         if isinstance(engine, ResilientTTS) and engine.on_health is None:
             engine.on_health = lambda ok, detail: self.health.report("voz", ok, detail, label="voz")
@@ -228,6 +258,19 @@ class Akemi:
         clipper = Clipper(OBSClient(s.obs_url, s.obs_password), autostart=s.obs_replay_autostart)
         register_obs_actions(self.actions, clipper)
         return clipper
+
+    # ------------------------------------------------- modo chamada (Capri)
+    def _call_can_speak(self) -> bool:
+        # No servidor, quem fala é o corpo: ele avisa se tem o cabo configurado.
+        return "chamada" in self.state.senses or getattr(self.speaker.engine, "call_mirror", None) is not None
+
+    def _call_audio(self, on: bool) -> None:
+        """Liga/desliga a voz dela no cabo virtual (no corpo, o servidor manda o recado)."""
+        mirror = getattr(self.speaker.engine, "call_mirror", None)
+        if mirror is not None:
+            mirror.mirror = on
+        if not on:
+            self.mind.call_history.clear()
 
     def _game_result(self, title: str, winner: str) -> None:
         what = {"dono": f"{self.settings.owner_name} ganhou", "akemi": "você ganhou", "empate": "empatou"}[winner]
@@ -540,6 +583,7 @@ class Akemi:
         self.speaker.register()
         self.bus.subscribe("ambient.screen", self._check_lookout)
         self.bus.subscribe("avatar.carinho", self._on_pat)
+        self.bus.subscribe("ambient.audio", self.call.on_audio)
         warmup = getattr(self.speaker.engine, "warmup", None)
         if warmup is not None:
             try:

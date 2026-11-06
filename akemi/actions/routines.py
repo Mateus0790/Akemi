@@ -27,7 +27,7 @@ import structlog
 
 from akemi.core.events import Event, Trust
 
-from .registry import ActionCall, ActionRegistry, Tier
+from .registry import ActionCall, ActionRegistry, Tier, describe_call
 
 logger = structlog.get_logger()
 
@@ -61,9 +61,7 @@ class Routine:
                 "criada": self.created_at, "vezes": self.runs}
 
 
-def describe_step(call: ActionCall) -> str:
-    args = ", ".join(str(v) for v in call.args.values() if v not in (None, ""))
-    return f"{call.name.replace('_', ' ')}{f' ({args})' if args else ''}"
+describe_step = describe_call
 
 
 class Routines:

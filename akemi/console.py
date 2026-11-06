@@ -30,6 +30,7 @@ Comandos:
     /lembretes                os lembretes pendentes
     /rotinas                  suas rotinas de voz ("quando eu disser X, faz Y")
     /jogar <jogo>             velha, forca, pedra ou adivinhacao (ou diga "vamos jogar forca")
+    /chamada                  entra ou sai da call de voz (ou diga "Akemi, entra na call")
     /vigias                   o que ela está vigiando na tela
     /sair
 """
@@ -216,6 +217,9 @@ async def run(
                         which_game(name) or name)}, source="jogo"))
                 except ValueError as exc:
                     print(f"  ({exc})")
+            elif line == "/chamada":
+                said = akemi.call.stop() if akemi.call.active else akemi.call.start()
+                akemi.bus.publish(Event("speech.say", {"text": said}, source="chamada"))
             elif line == "/rotinas":
                 print("  " + akemi.routines.describe())
             elif line == "/vigias":

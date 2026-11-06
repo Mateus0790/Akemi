@@ -30,6 +30,7 @@ SENSE_LABEL = {
     "tela": "vê a tela",
     "audio_pc": "ouve o áudio do PC",
     "acoes": "mexe no PC",
+    "chamada": "pode falar numa call de voz",
 }
 
 

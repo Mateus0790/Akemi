@@ -72,6 +72,12 @@ class PendingConfirmation:
     created_at: float = field(default_factory=time.time)
 
 
+def describe_call(call: ActionCall) -> str:
+    """ "abrir programa (Discord)": a ação em palavras, para perguntas e resumos."""
+    args = ", ".join(str(v) for v in call.args.values() if v not in (None, ""))
+    return f"{call.name.replace('_', ' ')}{f' ({args})' if args else ''}"
+
+
 def parse_action_calls(text: str) -> tuple[str, list[ActionCall]]:
     """Separa o texto falado das chamadas de ação embutidas."""
     calls: list[ActionCall] = []
@@ -130,9 +136,9 @@ class ActionRegistry:
     def get(self, name: str) -> Action | None:
         return self._actions.get(name)
 
-    def describe_for_prompt(self) -> str:
-        """Lista das ações disponíveis, para colocar no prompt do dono."""
-        if not self._actions:
+    def describe_for_prompt(self, only: set[str] | None = None) -> str:
+        """Lista das ações disponíveis, para colocar no prompt do dono (``only`` filtra)."""
+        if not self._actions or (only is not None and not only & set(self._actions)):
             return ""
         lines = [
             "Você pode executar ações escrevendo, no fim da resposta, uma tag como "
@@ -142,7 +148,7 @@ class ActionRegistry:
             "Ações disponíveis:",
         ]
         for a in self._actions.values():
-            if a.tier == Tier.FORBIDDEN:
+            if a.tier == Tier.FORBIDDEN or (only is not None and a.name not in only):
                 continue
             ps = ", ".join(f"{k}: {v}" for k, v in a.params.items()) or "sem parâmetros"
             conf = " (pede confirmação)" if a.tier == Tier.CONFIRM else ""
@@ -238,6 +244,21 @@ class ActionRegistry:
             return ActionResult(pending.call.name, "denied", "dono recusou")
         action = self._actions[pending.call.name]
         return await self._run(action, pending.call)
+
+    def propose(self, call: ActionCall, allowed: set[str], who: str = "Pediram") -> ActionResult:
+        """Alguém que não é o dono pediu uma ação (ex.: amigo na call): vira pergunta ao dono.
+
+        Nada roda aqui. Só fica pendente, e só o "sim" do dono (``resolve_confirmation``
+        com ``Trust.OWNER``) executa. Fora da lista ``allowed`` ou proibida: negada.
+        """
+        action = self._actions.get(call.name)
+        if action is None:
+            return ActionResult(call.name, "unknown", "ação inexistente")
+        if call.name not in allowed or action.tier == Tier.FORBIDDEN:
+            return ActionResult(call.name, "denied", "fora do que podem pedir")
+        self._pending = PendingConfirmation(call)
+        return ActionResult(call.name, "pending_confirmation",
+                            f"{who}: {describe_call(call)}. Você deixa? Diz sim ou não.")
 
     async def run_approved(self, call: ActionCall, trust: Trust) -> ActionResult:
         """Um passo que o dono já aprovou antes (ex.: rotina confirmada ao ser criada).

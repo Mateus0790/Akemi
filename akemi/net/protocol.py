@@ -34,7 +34,7 @@ from typing import Any
 VERSION = 1
 MAX_TEXT = 4000
 AMBIENT_KINDS = {"screen", "audio"}
-SENSES = ("voz", "microfone", "tela", "audio_pc", "acoes")
+SENSES = ("voz", "microfone", "tela", "audio_pc", "acoes", "chamada")
 EVOLUTION_ACTIONS = {"listar", "evoluir", "aprovar", "rejeitar", "desfazer"}
 
 # Códigos de fechamento (4000–4999 são livres para a aplicação).

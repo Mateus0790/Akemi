@@ -228,6 +228,12 @@ class Body:
             task = asyncio.create_task(self._run_action(msg))
             self._action_tasks.add(task)
             task.add_done_callback(self._action_tasks.discard)
+        elif kind == "chamada":
+            mirror = getattr(self.voice.engine, "call_mirror", None)
+            if mirror is not None:
+                mirror.mirror = bool(msg.get("on"))
+            elif msg.get("on"):
+                logger.warning("call mode needs CALL_OUTPUT_DEVICE on the body")
         elif kind == "evolucao":
             print(f"\n{msg.get('texto', '')}")
         elif kind in ("welcome", "paused"):
