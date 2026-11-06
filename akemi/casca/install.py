@@ -161,7 +161,10 @@ def _write(path: Path, text: str) -> None:
 def apply(source: str, on: bool, *, path: Path | None = None, command: str | None = None) -> str:
     """Liga (``on``) ou desliga os hooks de um assistente. Devolve o que fez."""
     path = path or config_path(source)
-    before = path.read_text(encoding="utf-8") if path.exists() else None
+    try:
+        before = path.read_text(encoding="utf-8") if path.exists() else None
+    except UnicodeDecodeError as exc:
+        raise HookError(f"{path} não está em UTF-8, então não sei ler. Não mudei nada.") from exc
     after = plan(source, on, before, command or hook_command(source), path)
     name = NAMES[source]
     if after is None:

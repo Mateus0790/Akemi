@@ -279,6 +279,11 @@ def test_install_refuses_broken_files(tmp_path):
     path.write_text(json.dumps({"hooks": []}))
     with pytest.raises(install.HookError):
         install.apply("claude", True, path=path, command="py -m akemi.casca.hook claude")
+    # Salvo em outra codificação (o Bloco de Notas antigo, cp1252): recusa, não quebra.
+    path.write_bytes("{ isso não é json".encode("cp1252"))
+    with pytest.raises(install.HookError, match="UTF-8"):
+        install.apply("claude", True, path=path, command="py -m akemi.casca.hook claude")
+    assert path.read_bytes() == "{ isso não é json".encode("cp1252")
 
 
 def test_install_codex_and_configure(tmp_path):
