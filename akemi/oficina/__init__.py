@@ -132,6 +132,14 @@ async def run(args: list[str], cwd: Path, env: dict[str, str] | None = None, tim
     return proc.returncode or 0, out.decode("utf-8", "replace")
 
 
+def default_test_cmd() -> list[str]:
+    """Roda o pytest do repositório. No Akemi.exe não há pytest dentro: usa o Python do PC."""
+    python = sys.executable
+    if getattr(sys, "frozen", False):
+        python = shutil.which("python") or shutil.which("py") or "python"
+    return [python, "-m", "pytest", "-x", "-p", "no:cacheprovider"]
+
+
 class Oficina:
     def __init__(
         self,
@@ -162,7 +170,7 @@ class Oficina:
         self.base = base
         self.per_day = per_day
         self.remote_url = remote_url or f"https://github.com/{repo}.git"
-        self.test_cmd = test_cmd or [sys.executable, "-m", "pytest", "-x", "-p", "no:cacheprovider"]
+        self.test_cmd = test_cmd or default_test_cmd()
         self.test_timeout_s = test_timeout_s
         self.fix_rounds = fix_rounds
         self.api_url = api_url.rstrip("/")

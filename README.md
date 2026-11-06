@@ -71,6 +71,13 @@ mas fica desativado por enquanto ([docs/CAPRI.md](docs/CAPRI.md#avatar-de-deskto
 
 ## Instalação
 
+**Sem Python:** baixe o `Akemi-windows.zip` em
+[Releases](https://github.com/Mateus0790/Akemi/releases), extraia e abra o
+`Akemi.exe`. Na primeira vez ele cria o `.env` ao lado dele. Detalhes, e como
+usar `corpo`, `servidor` e `chip` pelo .exe: [docs/EXE.md](docs/EXE.md).
+
+**Com Python** (para mexer no código):
+
 Requisitos: Python 3.11+. Windows 10/11 para captura de áudio.
 
 ```powershell

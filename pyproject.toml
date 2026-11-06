@@ -86,6 +86,9 @@ obs = [
 avatar = [
     "Pillow>=10.4",  # só para skins em PNG; o avatar desenhado usa só o tkinter
 ]
+exe = [
+    "pyinstaller>=6.10,<7",  # gera o Akemi.exe (packaging/akemi.spec)
+]
 dev = [
     "pytest==8.3.3",
     "pytest-asyncio==0.24.0",
