@@ -32,7 +32,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
 - Gatilhos para comentários espontâneos (`akemi/brain/triggers.yaml`)
 - Captura de áudio do sistema (WASAPI loopback) → VAD → segmentação → Whisper
-- **Voz local com Piper** (pt-BR, offline), interrompível, com escolha da saída de áudio
+- **Voz principal com Fish Audio** (nuvem) e voz local com Kokoro/Piper (offline) de reserva
+- **Apps por MCP** ([docs/MCP.md](docs/MCP.md)): ela usa as ferramentas dos mesmos servidores
+  MCP do Claude Desktop, Cursor e VS Code (arquivos, navegador, GitHub...)
 - **Microfone**: fale "Akemi, ..." e ela responde; interrompa falando por cima dela
 - **Visão**: ela lê a tela (OCR) quando algo muda e, com um modelo de visão, entende jogos e vídeos
 - Modo console para conversar sem áudio
@@ -108,6 +110,7 @@ Comandos no console:
 | `/pensar` | força um momento de pensamento |
 | `/estado` | mostra humor, objetivo, tarefas, gostos e opiniões |
 | `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
+| `/mcp` | os apps conectados por MCP e as ferramentas de cada um ([docs/MCP.md](docs/MCP.md)) |
 | `/pr <pedido>`, `/prs` | ela abre um PR no próprio código; lista os PRs dela |
 | `/voz` | reconhecimento da sua voz: cadastro e quem ela ouviu |
 | `analisa a pasta X` | ela lê em segundo plano e conta depois ([docs/ARQUIVOS.md](docs/ARQUIVOS.md)) |
@@ -189,6 +192,24 @@ gera a voz na mesma velocidade.
 Para a live, aponte `TTS_OUTPUT_DEVICE` para um cabo virtual (ex.: VB-Cable) e
 capture esse dispositivo no OBS. Enquanto ela fala, o áudio do sistema não é
 transcrito, para ela não "ouvir a si mesma".
+
+### Sem internet: cérebro e voz locais
+
+Com a nuvem como principal (NIM + Fish Audio) e o local como reserva, ela segue
+funcionando quando a internet cai: troca sozinha para o cérebro e a voz do PC e
+volta para a nuvem quando a conexão volta. No `.env`:
+
+```
+BRAIN_FALLBACK=["ollama"]        # ollama pull qwen2.5:7b
+FALLBACK_FAST_MODEL=qwen2.5:7b
+TTS_ENGINE=fish
+TTS_FALLBACK=kokoro              # ou piper; auto = a que estiver baixada
+```
+
+Para usar só o local, mesmo com internet: `BRAIN_PROVIDER=ollama`,
+`FAST_MODEL=qwen2.5:7b`, `DEEP_MODEL=qwen2.5:7b` (ou um maior, como
+`qwen2.5:14b`) e `TTS_ENGINE=kokoro`. Detalhes em
+[docs/INDEPENDENCIA.md](docs/INDEPENDENCIA.md).
 
 ## Microfone
 
@@ -337,6 +358,30 @@ No modo servidor + corpo, o núcleo decide (confere que foi você e pede o "sim"
 e o corpo executa no PC. O corpo só aceita as ações da lista acima, então nem
 um núcleo comprometido consegue mandar ele rodar outra coisa. Com o PC
 desligado, ela responde que o PC não está conectado.
+
+## Apps por MCP
+
+Ela usa as ferramentas de outros aplicativos pelo
+[MCP](https://modelcontextprotocol.io), com os mesmos servidores do Claude
+Desktop, do Cursor e do VS Code. Crie `data/mcp.json` (ou aponte `MCP_CONFIG`
+para o `claude_desktop_config.json` que você já tem):
+
+```json
+{
+  "mcpServers": {
+    "arquivos": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/voce/Documents"]
+    }
+  }
+}
+```
+
+Cada ferramenta vira uma ação (`arquivos.read_text_file`...). O que só lê roda
+direto; o que muda algo pede "sim". Só você pede (o chat da live nunca), ela
+nunca usa um app por conta própria, e o que o app devolve chega para ela como
+dado, nunca como ordem. `/mcp` mostra o que conectou. Tudo em
+[docs/MCP.md](docs/MCP.md).
 
 ## Segurança: o chat nunca manda nela
 

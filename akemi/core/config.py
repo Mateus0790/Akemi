@@ -118,6 +118,16 @@ class Settings(BaseSettings):
     oficina_llm_timeout_s: float = 300.0  # escrever código demora mais que conversar
     oficina_test_timeout_s: float = 900.0
 
+    # --- MCP: ferramentas de outros aplicativos (docs/MCP.md) ---
+    mcp_enabled: bool = True
+    # Arquivo(s) no formato do Claude Desktop/Cursor, separados por ";" ou lista JSON.
+    # Vazio = data/mcp.json
+    mcp_config: str = ""
+    mcp_timeout_s: float = 60.0  # por chamada de ferramenta
+    mcp_connect_timeout_s: float = 90.0  # o npx baixa o servidor na primeira vez
+    mcp_max_tools: int = 60  # cada ferramenta ocupa espaço no prompt
+    mcp_result_max_chars: int = 4000  # o que volta para o cérebro ler
+
     # --- Rede ---
     control_api_host: str = "127.0.0.1"
     control_api_port: int = 8765

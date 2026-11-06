@@ -224,6 +224,7 @@ class Akemi:
         )
         register_game_actions(self.actions, self.arcade)
         self.clipper = self._build_clipper()
+        self.mcp = self._build_mcp()
         s = settings
         self.call = CallMode(
             self.bus, owner=s.owner_name, wake_words=s.wake_words, friends_can_ask=s.call_friends_can_ask,
@@ -418,6 +419,37 @@ class Akemi:
         return None
 
     # ------------------------------------------------------------- arquivos
+    def mcp_config_paths(self) -> list[Path]:
+        from akemi.mcp import parse_paths
+
+        paths = parse_paths(self.settings.mcp_config)
+        return [Path(p) for p in paths] or [self.settings.data_dir / "mcp.json"]
+
+    def _build_mcp(self):
+        """Apps com servidor MCP (docs/MCP.md). Sem arquivo de configuração, nada muda."""
+        if not self.settings.mcp_enabled:
+            return None
+        from akemi.mcp import MCPHub, load_config
+
+        servers, problems = load_config(self.mcp_config_paths())
+        for problem in problems:
+            logger.warning("mcp config problem", problem=problem)
+        if not servers:
+            return None
+        s = self.settings
+        return MCPHub(
+            self.actions, servers,
+            timeout_s=s.mcp_timeout_s, connect_timeout_s=s.mcp_connect_timeout_s,
+            max_tools=s.mcp_max_tools, result_max_chars=s.mcp_result_max_chars,
+            on_health=lambda part, ok, detail, label: self.health.report(part, ok, detail, label=label),
+        )
+
+    def describe_mcp(self) -> str:
+        if self.mcp is None:
+            where = ", ".join(str(p) for p in self.mcp_config_paths())
+            return f"  nenhum app MCP ligado (crie {where}; veja docs/MCP.md)"
+        return self.mcp.describe()
+
     def _build_files(self) -> FileAnalyst | None:
         """A análise de arquivos: só com pasta liberada e, por padrão, só com cérebro local."""
         s = self.settings
@@ -646,6 +678,8 @@ class Akemi:
         if self.persist and self.settings.self_improve_interval_s > 0:
             self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
         self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
+        if self.mcp is not None:  # conecta em segundo plano: o npx pode demorar
+            self._tasks.append(self._supervised("mcp", self.mcp.run, "conexão com os apps"))
         if late_or_back := self.reminders.restore():
             logger.info("reminders restored", count=late_or_back)
         if self.casca is not None:
@@ -719,6 +753,8 @@ class Akemi:
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self.mcp is not None:
+            await self.mcp.close()
         if self.state_path:
             self.state.save(self.state_path)
         for p in {id(self.models.fast): self.models.fast, id(self.models.deep): self.models.deep}.values():
