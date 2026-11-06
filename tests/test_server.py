@@ -225,6 +225,12 @@ def test_server_class_is_exported():
 # ---------------------------------------------------- ações do PC no corpo
 from akemi.actions.desktop import StartApp, StartMenu, Window, register_desktop_actions  # noqa: E402
 from akemi.actions.registry import ActionRegistry  # noqa: E402
+from akemi.actions.system import Battery, System  # noqa: E402
+
+
+class FakeBattery(System):
+    def battery(self):
+        return Battery(50, False, False)
 
 
 class FakePC:
@@ -235,7 +241,8 @@ class FakePC:
         menu = StartMenu(loader=lambda: [StartApp("Discord", "com.squirrel.Discord.Discord")],
                          launcher=self.launched.append)
         register_desktop_actions(self.actions, start_menu=menu, press=lambda vk, n: None,
-                                 windows=lambda: self.windows, close=self.closed.append, open_url=lambda u: None)
+                                 windows=lambda: self.windows, close=self.closed.append, open_url=lambda u: None,
+                                 system=FakeBattery())
 
 
 def pc_responder(msgs, json_mode):
@@ -246,6 +253,8 @@ def pc_responder(msgs, json_mode):
         return '[[acao:abrir_programa {"nome": "discord"}]]'
     if "fecha" in last:
         return '[[acao:fechar_programa {"nome": "Spotify"}]]'
+    if "bateria" in last:
+        return '[[acao:info_pc {"o_que": "bateria"}]]'
     return "Oi!"
 
 
@@ -297,6 +306,14 @@ async def test_close_program_confirms_through_the_body(pc_core, pc_body):
     await body.owner_say("sim")
     await until(lambda: len(tts.said) == 2)
     assert [w.hwnd for w in pc.closed] == [7] and tts.said[-1] == "Feito."
+
+
+@pytest.mark.asyncio
+async def test_pc_info_is_read_on_the_body(pc_core, pc_body):
+    body, pc, tts = pc_body
+    assert pc_core.akemi.actions.get("info_pc") is not None
+    await body.owner_say("quanto de bateria tem?")
+    await until(lambda: tts.said == ["A bateria tá em 50%."])
 
 
 @pytest.mark.asyncio

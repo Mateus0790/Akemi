@@ -10,7 +10,8 @@ próprio da Akemi**.
 |---|---|---|
 | Desktop pet que senta nas janelas | Avatar de desktop (**desativado por enquanto**) | `akemi/avatar/` |
 | Code/Husk Mode | Modo Casca (`akemi --casca claude`) | `akemi/casca/` |
-| Lembretes em datas | `lembrete` com `quando` ("dia 5 de dezembro às 9h") | `akemi/actions/reminders.py`, `when.py` |
+| Lembretes em datas | `lembrete` com `quando` ("dia 5 de dezembro às 9h"), entendido direto da frase | `akemi/actions/reminders.py`, `when.py` |
+| Ações no PC (configurações, energia, janelas...) | volume exato, Configurações, bateria/disco, desligar, dividir a tela, modo escuro | `akemi/actions/system.py` |
 | Lookout ("me avisa quando...") | Vigia da tela (`vigiar_tela`) | `akemi/actions/lookout.py` |
 | Routines ("when I say X...") | Rotinas de voz ("quando eu disser 'modo jogo'...") | `akemi/actions/routines.py` |
 | Mini games | Minijogos por voz: velha, forca, pedra-papel-tesoura, adivinhação | `akemi/games/` |
@@ -135,6 +136,22 @@ Os lembretes ficam em `data/lembretes.json` e **sobrevivem a um reinício**. Se
 um venceu com ela desligada, ela avisa assim que volta, dizendo que atrasou. A
 espera confere o relógio de verdade, então o PC hibernar não perde o horário.
 Pergunte "quais lembretes eu tenho?" ou use `/lembretes`.
+
+Um pedido com horário ("me lembra amanhã às 9 de ligar pro mecânico", "põe um
+timer de 5 minutos") é entendido **direto da frase, sem o modelo**: funciona
+igual com o cérebro reserva local, que é pequeno e erra conta de minutos. Sem
+horário ("me lembra de comprar pão"), quem responde é o modelo, que pergunta
+quando. Frases como "lembra que eu gosto de café" (um fato) e "me lembra o que
+eu falei ontem" (uma pergunta) não viram lembrete.
+
+Hora com "h" ou ":" ("às 8h", "18:30") vale como está. Hora solta ("às 3", "às
+nove") é a próxima que vier: "às 3" depois do almoço é 15h. Em outro dia, de 1
+a 6 é de tarde ("amanhã às 3" é 15h) e de 7 a 11, de manhã. Ela sempre repete o
+horário que entendeu, então dá para corrigir na hora.
+
+Logo depois de um lembrete tocar, "adia 10 minutos" (ou "soneca", "mais meia
+hora") marca de novo. "Cancela o lembrete do mecânico" (ou "o último", "o 2")
+cancela um só.
 
 ## Vigia da tela
 

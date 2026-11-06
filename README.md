@@ -264,9 +264,20 @@ Peça por voz ou pelo terminal:
 | "fecha o Spotify" | fecha a janela, como clicar no X (o programa pode perguntar se quer salvar) | **sim** |
 | "pausa a música", "pula essa música" | teclas de mídia (Spotify, YouTube, etc.) | não |
 | "aumenta o volume", "abaixa o som 20%" | volume do Windows | não |
+| "põe o volume em 30", "muta", "tira o mudo" | volume exato e mudo de verdade (não a tecla que alterna) | não |
 | "pesquisa receita de bolo no YouTube" | abre a pesquisa no navegador | não |
+| "abre as configurações de bluetooth" | abre a página certa das Configurações (som, Wi-Fi, Windows Update, tela...) | não |
+| "quanto de bateria tem?", "quanto espaço sobra no disco?" | diz bateria, disco, memória RAM, IP na rede ou volume | não |
+| "minimiza tudo", "traz as janelas de volta" | mostra a área de trabalho, ou desfaz | não |
+| "põe o Discord na esquerda e o Chrome na direita" | divide a tela; também maximiza, minimiza e restaura | não |
+| "coloca o modo escuro" | Windows e apps no modo escuro ou claro | não |
+| "recorta uma parte da tela" | abre o recorte de tela do Windows | não |
+| "bloqueia o PC", "suspende o PC" | bloqueia ou põe para dormir, depois de responder | **sim** |
+| "desliga o PC daqui a uma hora", "reinicia o PC" | desliga ou reinicia na hora marcada | **sim** |
+| "cancela o desligamento" | cancela o que estiver marcado | não |
 | "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
-| "me lembra amanhã às 9h de ligar pro dentista" | lembrete com data (fica salvo) | não |
+| "me lembra amanhã às 9h de ligar pro dentista" | lembrete com data (fica salvo), entendido sem o modelo | não |
+| "põe um timer de 5 minutos", "adia 10 minutos", "cancela o lembrete do dentista" | timer, adiar o que acabou de tocar, cancelar um ([docs/CAPRI.md](docs/CAPRI.md#lembretes-com-data)) | não |
 | "me avisa quando aparecer download concluído" | vigia a tela (com `--tela`) | não |
 | "quando eu disser modo jogo, abre o Discord e baixa o volume" | cria uma rotina | **sim**, ao criar |
 | "clipa isso" | salva o replay buffer do OBS (`OBS_ENABLED`) | não |
@@ -277,6 +288,10 @@ Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
 live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as
 "livres". Lembretes ficam em `data/lembretes.json` e sobrevivem a um reinício. As
 ações do PC funcionam no Windows.
+
+Desligar e reiniciar não forçam nada: na hora, o Windows ainda pergunta se você
+quer salvar o que estiver aberto. O horário marcado fica com a Akemi, então
+fechar a Akemi (ou o corpo) também cancela o desligamento.
 
 No modo servidor + corpo, o núcleo decide (confere que foi você e pede o "sim")
 e o corpo executa no PC. O corpo só aceita as ações da lista acima, então nem
