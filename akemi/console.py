@@ -15,6 +15,7 @@ Comandos:
     /audio <texto>            simula algo ouvido no áudio do PC
     /pensar                   força um momento de pensamento
     /estado                   mostra humor, objetivo, tarefas, gostos e opiniões
+    /lembretes                os lembretes marcados
     /saude                    como ela está por dentro (cérebro em uso, voz, autocura)
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
@@ -134,6 +135,8 @@ async def run(
                 print(f"  (pensamento: {data.get('pensamento', '—')})")
             elif line == "/estado":
                 print(akemi.state.describe())
+            elif line == "/lembretes":
+                print("  " + akemi.reminders.describe())
             elif line == "/saude":
                 print(akemi.describe_health())
             elif line.startswith("/pr ") or line == "/prs":

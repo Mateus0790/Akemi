@@ -12,7 +12,7 @@ import structlog
 from akemi.actions.builtin import register_builtin_actions
 from akemi.actions.files import FileAnalyst, parse_request, register_file_actions
 from akemi.actions.registry import ActionRegistry, Tier
-from akemi.actions.reminders import Reminders, register_reminder_actions
+from akemi.actions.reminders import Reminder, Reminders, register_reminder_actions, say_when
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
@@ -126,7 +126,7 @@ class Akemi:
 
         self.actions = ActionRegistry()
         register_builtin_actions(self.actions, self.memory, self.state)
-        self.reminders = Reminders(self._remind)
+        self.reminders = Reminders(self._remind, data / "lembretes.json" if persist else None)
         register_reminder_actions(self.actions, self.reminders)
         self.files: FileAnalyst | None = self._build_files()
         if desktop_actions:
@@ -163,8 +163,12 @@ class Akemi:
             health=self.health,
             initiative=settings.initiative_enabled,
         )
+        # Pedidos claros que ela reconhece sem o modelo: lembrete com horário
+        # primeiro ("me lembra amanhã de analisar a pasta X" é lembrete).
+        parsers = [self.reminders.direct_request]
         if self.files is not None:
-            self.mind.direct_request = parse_request
+            parsers.append(parse_request)
+        self.mind.direct_request = lambda text: next((c for p in parsers if (c := p(text)) is not None), None)
         engine = tts or build_tts(settings)
         if isinstance(engine, ResilientTTS) and engine.on_health is None:
             engine.on_health = lambda ok, detail: self.health.report("voz", ok, detail, label="voz")
@@ -324,9 +328,17 @@ class Akemi:
         self.bus.publish(Event("owner.speech_started", source=source, trust=Trust.OWNER, priority=Priority.URGENT))
         self.bus.publish(Event("owner.message", {"text": text}, source=source, trust=Trust.OWNER, priority=Priority.HIGH))
 
-    def _remind(self, text: str) -> None:
+    def _remind(self, reminder: Reminder, late: bool = False) -> None:
+        owner, text = self.settings.owner_name, reminder.text
+        if late:
+            what = f": {text}" if text else " (um timer)"
+            msg = f"Ei, {owner}, passou a hora de um lembrete enquanto eu tava fora. Era {say_when(reminder.due_at)}{what}"
+        elif text:
+            msg = f"Ei, {owner}, lembrete: {text}"
+        else:
+            msg = f"Ei, {owner}, deu o tempo!"
         self.bus.publish(
-            Event("speech.say", {"text": f"Ei, {self.settings.owner_name}, lembrete: {text}", "origin": "lembrete"},
+            Event("speech.say", {"text": msg, "origin": "lembrete"},
                   source="lembrete", trust=Trust.SYSTEM, priority=Priority.HIGH)
         )
 
@@ -409,6 +421,7 @@ class Akemi:
         if self.persist and self.settings.self_improve_interval_s > 0:
             self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
         self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
+        self.reminders.start()  # os salvos voltam; os que venceram com ela desligada tocam já
         self.senses.start()
         if self.senses.screen is not None:
             screen = self.senses.screen
@@ -468,6 +481,7 @@ class Akemi:
 
     async def stop(self) -> None:
         await self.senses.stop()
+        self.reminders.stop()
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)

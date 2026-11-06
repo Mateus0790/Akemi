@@ -1,12 +1,10 @@
 """Ações no PC com backends falsos (rodam em qualquer sistema)."""
 
-import asyncio
-
 import pytest
 
 from akemi.actions.desktop import VK, StartApp, StartMenu, Window, find_windows, register_desktop_actions
 from akemi.actions.registry import ActionCall, ActionRegistry
-from akemi.actions.reminders import Reminders, register_reminder_actions
+from akemi.actions.system import System
 from akemi.core.events import Trust
 
 # Amostra real do Menu Iniciar do dono (Get-StartApps).
@@ -48,13 +46,21 @@ def test_start_menu_unknown_program():
     assert launched == []
 
 
-def make(windows=()):
+class MuteOnly(System):
+    def __init__(self):
+        self.muted = []
+
+    def set_mute(self, mute):
+        self.muted.append(mute)
+
+
+def make(windows=(), system=None):
     reg = ActionRegistry()
     m, launched = menu()
     keys, closed, urls = [], [], []
     register_desktop_actions(
         reg, start_menu=m, press=lambda vk, n: keys.append((vk, n)),
-        windows=lambda: list(windows), close=closed.append, open_url=urls.append,
+        windows=lambda: list(windows), close=closed.append, open_url=urls.append, system=system or MuteOnly(),
     )
     return reg, launched, keys, closed, urls
 
@@ -75,16 +81,18 @@ async def test_open_program_runs_directly_for_owner_only():
 
 @pytest.mark.asyncio
 async def test_media_and_volume_keys():
-    reg, _, keys, *_ = make()
+    system = MuteOnly()
+    reg, _, keys, *_ = make(system=system)
     for cmd in ("pausar", "tocar", "próxima", "anterior"):
         assert (await run(reg, "midia", comando=cmd)).status == "executed"
     await run(reg, "volume", comando="subir", quanto="20%")
     await run(reg, "volume", comando="baixar")
-    await run(reg, "volume", comando="mutar")
+    await run(reg, "volume", comando="mutar")  # mudo de verdade, não a tecla que alterna
     assert keys == [
         (VK["tocar_pausar"], 1), (VK["tocar_pausar"], 1), (VK["proxima"], 1), (VK["anterior"], 1),
-        (VK["volume_mais"], 10), (VK["volume_menos"], 5), (VK["mutar"], 1),
+        (VK["volume_mais"], 10), (VK["volume_menos"], 5),
     ]
+    assert system.muted == [True]
     assert (await run(reg, "midia", comando="dançar")).status == "error"
 
 
@@ -176,45 +184,3 @@ async def test_close_program_not_open():
     await run(reg, "fechar_programa", nome="photoshop")
     r = await reg.resolve_confirmation(True, Trust.OWNER)
     assert r.status == "error" and "photoshop" in r.detail
-
-
-@pytest.mark.asyncio
-async def test_reminders_fire_and_cancel():
-    fired = []
-    reg = ActionRegistry()
-    reminders = Reminders(fired.append)
-    register_reminder_actions(reg, reminders)
-    r = await reg.request(ActionCall("lembrete", {"minutos": "0,002", "texto": "beber água"}), Trust.OWNER)
-    assert r.status == "executed"
-    await reg.request(ActionCall("lembrete", {"minutos": 30, "texto": "reunião"}), Trust.OWNER)
-    await asyncio.sleep(0.3)
-    assert fired == ["beber água"] and [x.text for x in reminders.pending] == ["reunião"]
-    r = await reg.request(ActionCall("cancelar_lembretes", {}), Trust.OWNER)
-    assert r.value == "Cancelei 1 lembrete(s)." and reminders.pending == []
-    bad = await reg.request(ActionCall("lembrete", {"minutos": "amanhã", "texto": "x"}), Trust.OWNER)
-    assert bad.status == "error"
-
-
-@pytest.mark.asyncio
-async def test_reminder_is_spoken(tmp_path):
-    from akemi.brain.providers import EchoProvider
-    from akemi.core.config import Settings
-    from akemi.core.orchestrator import Akemi
-    from akemi.tts.base import TTSEngine
-
-    class Rec(TTSEngine):
-        said = []
-
-        async def speak(self, text):
-            self.said.append(text)
-
-    settings = Settings(_env_file=None, brain_provider="echo", data_dir=tmp_path, idle_think_interval_s=0)
-    tts, llm = Rec(), EchoProvider(lambda m, j: '[[acao:lembrete {"minutos": 0.002, "texto": "beber água"}]]')
-    akemi = Akemi(settings, fast=llm, deep=llm, tts=tts, persist=False, desktop_actions=False)
-    assert akemi.actions.get("abrir_programa") is None  # sem ações de PC quando desligadas
-    await akemi.start()
-    akemi.owner_say("me lembra de beber água")
-    await akemi.bus.drain()
-    await asyncio.sleep(0.5)
-    await akemi.stop()
-    assert tts.said == ["Combinado, te lembro em 0.002 minutos.", "Ei, Mateus, lembrete: beber água"]

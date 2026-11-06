@@ -26,6 +26,7 @@ import structlog
 from akemi.safety.moderation import normalize
 
 from .registry import ActionRegistry, Tier
+from .system import SYSTEM_ACTIONS, System, default_system, register_system_actions
 
 logger = structlog.get_logger()
 
@@ -252,7 +253,8 @@ def find_windows(query: str, windows: list[Window]) -> list[Window]:
 # --------------------------------------------------------------- registro
 # Ações que mexem no PC. No modo servidor + corpo, o núcleo encaminha só estas
 # ao corpo, e o corpo só aceita estas.
-PC_ACTIONS = ("abrir_programa", "abrir_site", "fechar_programa", "pesquisar", "midia", "volume")
+PC_ACTIONS = ("abrir_programa", "abrir_site", "fechar_programa", "pesquisar", "midia", "volume", *SYSTEM_ACTIONS)
+
 
 def register_desktop_actions(
     registry: ActionRegistry,
@@ -262,8 +264,16 @@ def register_desktop_actions(
     windows: Callable[[], list[Window]] = list_windows,
     close: Callable[[Window], None] = close_window,
     open_url: Callable[[str], object] = webbrowser.open,
+    system: System | None = None,
 ) -> None:
     menu = start_menu or StartMenu()
+    pc = system or default_system()
+
+    def find_window(nome: str) -> Window | None:
+        found = find_windows(nome, windows())
+        return found[0] if found else None
+
+    register_system_actions(registry, pc, find_window)
 
     @registry.register("abrir_programa", "abre qualquer programa ou jogo do Menu Iniciar pelo nome",
                        example=('abre o Spotify', '[[acao:abrir_programa {"nome": "Spotify"}]]'),
@@ -336,11 +346,22 @@ def register_desktop_actions(
             raise ValueError(f"comando de mídia desconhecido: {comando}")
         return "ok"
 
-    @registry.register("volume", "muda o volume do PC",
-                       example=('abaixa o som', '[[acao:volume {"comando": "baixar", "quanto": 10}]]'),
-                       params={"comando": "subir, baixar ou mutar", "quanto": "quanto em %, padrão 10"})
-    def volume(comando: str, quanto: int | str = 10) -> str:
+    @registry.register("volume", "muda o volume do PC (para saber o volume, use info_pc)",
+                       example=('põe o volume em 30', '[[acao:volume {"nivel": 30}]]'),
+                       params={"comando": "subir, baixar, mutar ou desmutar",
+                               "quanto": "quanto subir ou baixar em %, padrão 10",
+                               "nivel": "volume exato em % (0 a 100), quando ele diz o número final"})
+    async def volume(comando: str = "", quanto: int | str = 10, nivel: int | str | None = None) -> str:
         c = normalize(comando)
+        if nivel is None and c.startswith(("defin", "coloc", "poe", "bot", "deix", "ajust", "fix")):
+            nivel = quanto  # "define o volume, quanto: 30"
+        if nivel is not None and str(nivel).strip():
+            m = re.search(r"\d+", str(nivel))
+            if m is None:
+                raise ValueError(f"volume em quanto? ({nivel})")
+            level = max(0, min(100, int(m[0])))
+            await asyncio.to_thread(pc.set_volume, level)
+            return f"Volume em {level}%."
         try:
             steps = max(1, min(50, round(int(str(quanto).strip(" %")) / 2)))  # cada tecla = 2%
         except ValueError:
@@ -349,8 +370,12 @@ def register_desktop_actions(
             press(VK["volume_mais"], steps)
         elif c.startswith(("baix", "dimi", "menos")):
             press(VK["volume_menos"], steps)
-        elif c.startswith(("mut", "sil", "desmut", "tira o mudo")):
-            press(VK["mutar"], 1)  # alterna
+        elif c.startswith(("desmut", "tira o mudo", "tira do mudo", "volta o som", "liga o som")):
+            await asyncio.to_thread(pc.set_mute, False)
+            return "Som de volta."
+        elif c.startswith(("mut", "sil", "desliga o som", "tira o som")):
+            await asyncio.to_thread(pc.set_mute, True)
+            return "Mudo."
         else:
             raise ValueError(f"comando de volume desconhecido: {comando}")
         return "ok"

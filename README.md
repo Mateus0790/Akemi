@@ -89,6 +89,7 @@ Comandos no console:
 | `/audio <texto>` | simula algo ouvido no PC |
 | `/pensar` | força um momento de pensamento |
 | `/estado` | mostra humor, objetivo, tarefas, gostos e opiniões |
+| `/lembretes` | os lembretes marcados |
 | `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
 | `/pr <pedido>`, `/prs` | ela abre um PR no próprio código; lista os PRs dela |
 | `/voz` | reconhecimento da sua voz: cadastro e quem ela ouviu |
@@ -248,14 +249,48 @@ Peça por voz ou pelo terminal:
 | "fecha o Spotify" | fecha a janela, como clicar no X (o programa pode perguntar se quer salvar) | **sim** |
 | "pausa a música", "pula essa música" | teclas de mídia (Spotify, YouTube, etc.) | não |
 | "aumenta o volume", "abaixa o som 20%" | volume do Windows | não |
+| "põe o volume em 30", "muta", "tira o mudo" | volume exato e mudo de verdade (não a tecla que alterna) | não |
 | "pesquisa receita de bolo no YouTube" | abre a pesquisa no navegador | não |
-| "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
+| "abre as configurações de bluetooth" | abre a página certa das Configurações (som, Wi-Fi, Windows Update, tela...) | não |
+| "quanto de bateria tem?", "quanto espaço sobra no disco?" | diz bateria, disco, memória RAM, IP na rede ou volume | não |
+| "minimiza tudo", "traz as janelas de volta" | mostra a área de trabalho, ou desfaz | não |
+| "põe o Discord na esquerda e o Chrome na direita" | divide a tela; também maximiza, minimiza e restaura | não |
+| "coloca o modo escuro" | Windows e apps no modo escuro ou claro | não |
+| "recorta uma parte da tela" | abre o recorte de tela do Windows | não |
+| "bloqueia o PC", "suspende o PC" | bloqueia ou põe para dormir, depois de responder | **sim** |
+| "desliga o PC daqui a uma hora", "reinicia o PC" | desliga ou reinicia na hora marcada | **sim** |
+| "cancela o desligamento" | cancela o que estiver marcado | não |
+| "me lembra amanhã às 9 de ligar pro mecânico" | avisa por voz na hora ([veja abaixo](#lembretes)) | não |
 | "lembra que eu gosto de café sem açúcar" | guarda na memória | não |
 
 Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
 live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as
-"livres". Lembretes ficam na memória do processo: reiniciar a Akemi apaga os
-pendentes. As ações do PC funcionam no Windows.
+"livres". As ações do PC funcionam no Windows.
+
+Desligar e reiniciar não forçam nada: na hora, o Windows ainda pergunta se você
+quer salvar o que estiver aberto. O horário marcado fica com a Akemi, então
+fechar a Akemi (ou o corpo) também cancela o desligamento.
+
+### Lembretes
+
+Ela lê o horário direto da frase, sem depender do modelo, então funciona igual
+com o cérebro reserva local:
+
+- "me lembra daqui a 10 minutos de tirar a pizza", "em uma hora e meia", "daqui a 1h30"
+- "às 18h30", "às 9", "às nove e meia da noite", "ao meio-dia"
+- "amanhã às 9", "depois de amanhã", "hoje à noite", "na sexta às 10"
+- "põe um timer de 5 minutos"
+
+"Às 3", sem dizer da manhã ou da tarde, é o próximo 3 que vier (de tarde, se
+já passou das 3 da manhã). Num outro dia, de 1 a 6 é de tarde e de 7 a 11 é de
+manhã. Ela sempre repete o horário que entendeu ("Combinado, te lembro amanhã
+às 15h"), então dá para corrigir na hora.
+
+Os lembretes ficam salvos em `data/lembretes.json`: reiniciar a Akemi não apaga
+nada, e um lembrete que venceu com ela desligada é avisado assim que ela volta.
+Depois que um lembrete toca, "adia 10 minutos" (ou "soneca") marca de novo.
+Também dá para pedir "quais lembretes eu tenho?" e "cancela o lembrete do
+mecânico".
 
 No modo servidor + corpo, o núcleo decide (confere que foi você e pede o "sim")
 e o corpo executa no PC. O corpo só aceita as ações da lista acima, então nem

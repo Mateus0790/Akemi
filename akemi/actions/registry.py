@@ -46,7 +46,9 @@ class Action:
     tier: Tier = Tier.FREE
     params: dict[str, str] = field(default_factory=dict)  # nome -> descrição
     speak_result: bool = False  # se o retorno deve ser falado (ex.: horário)
-    confirm: str = ""  # pergunta de confirmação, com os parâmetros: "Fecho o {nome}?"
+    # Pergunta de confirmação, com os parâmetros ("Fecho o {nome}?"), ou uma
+    # função que recebe os argumentos e devolve a pergunta.
+    confirm: str | Callable[[dict[str, Any]], str] = ""
     example: tuple[str, str] | None = None  # (pedido do dono, tag): modelos seguem exemplos
 
 
@@ -109,7 +111,7 @@ class ActionRegistry:
         tier: Tier = Tier.FREE,
         params: dict[str, str] | None = None,
         speak_result: bool = False,
-        confirm: str = "",
+        confirm: str | Callable[[dict[str, Any]], str] = "",
         example: tuple[str, str] | None = None,
     ) -> Callable[[ActionFn], ActionFn]:
         def deco(fn: ActionFn) -> ActionFn:
@@ -198,8 +200,9 @@ class ActionRegistry:
     def _confirm_text(self, action: Action, call: ActionCall) -> str:
         if action.confirm:
             try:
-                return action.confirm.format(**call.args) + " Diz sim ou não."
-            except (KeyError, IndexError, ValueError):
+                question = action.confirm(call.args) if callable(action.confirm) else action.confirm.format(**call.args)
+                return question + " Diz sim ou não."
+            except (KeyError, IndexError, ValueError, TypeError, AttributeError):
                 pass
         args = ", ".join(f"{k}={v}" for k, v in call.args.items())
         return f"Posso executar {action.name}{f' ({args})' if args else ''}? Diz sim ou não."

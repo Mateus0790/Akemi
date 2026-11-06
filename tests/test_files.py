@@ -392,7 +392,8 @@ async def test_direct_request_keeps_owner_only_rule(tmp_path, tree):
 
 
 def test_direct_requests_only_exist_with_files_on(tmp_path):
-    assert build(tmp_path).mind.direct_request is None
+    direct = build(tmp_path).mind.direct_request
+    assert direct("analisa a pasta Codes") is None  # sem pasta liberada, vai para o modelo
 
 
 def test_first_root_wins_and_portuguese_names_work_inside_it(tmp_path):
