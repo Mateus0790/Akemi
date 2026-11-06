@@ -2,7 +2,7 @@
 
 O [Capri](https://github.com/lachydotmcg/capri-desktop) é uma companheira de
 desktop feita por fãs: ela senta nas suas janelas, fala, entra nas suas
-chamadas e vira o "corpo" do Claude Code enquanto ele trabalha. A Akemi absorveu
+chamadas, joga com você e vira o "corpo" do Claude Code enquanto ele trabalha. A Akemi absorveu
 as ideias que combinam com ela, **reescritas do zero em Python e com o visual
 próprio da Akemi**.
 
@@ -12,6 +12,10 @@ próprio da Akemi**.
 | Code/Husk Mode | Modo Casca (`akemi --casca claude`) | `akemi/casca/` |
 | Lembretes em datas | `lembrete` com `quando` ("dia 5 de dezembro às 9h") | `akemi/actions/reminders.py`, `when.py` |
 | Lookout ("me avisa quando...") | Vigia da tela (`vigiar_tela`) | `akemi/actions/lookout.py` |
+| Routines ("when I say X...") | Rotinas de voz ("quando eu disser 'modo jogo'...") | `akemi/actions/routines.py` |
+| Mini games | Minijogos por voz: velha, forca, pedra-papel-tesoura, adivinhação | `akemi/games/` |
+| Clips ("clip that") | Clipes pelo OBS ("clipa isso") | `akemi/actions/obs.py` |
+| Call mode | Modo chamada ("Akemi, entra na call") | `akemi/chamada.py`, `akemi/tts/mirror.py` |
 
 ## Sobre a licença
 
@@ -145,11 +149,136 @@ visão), sem ligar para acentos e maiúsculas e aceitando pequenos erros do OCR.
 Quando aparece, ela avisa uma vez. Até 8 vigias ao mesmo tempo. O texto da tela
 só é comparado com a sua frase: nada que aparece na tela vira ordem.
 
+## Rotinas de voz
+
+Junte ações que ela já sabe fazer debaixo de uma frase sua:
+
+- "quando eu disser **modo jogo**, abre o Discord e abaixa o volume pra 30"
+- "quando eu disser **fim do dia**, pausa a música e fecha o Spotify"
+
+Ela lê os passos e pede o seu "sim" uma vez, na hora de criar. Depois é só dizer
+"Akemi, modo jogo" (ou "roda a rotina modo jogo") e ela faz tudo na hora, sem
+esperar o modelo e sem perguntar de novo, nem os passos que normalmente pedem
+confirmação (como fechar programa): você já aprovou ao criar. Ela conta o que
+fez e o que não deu.
+
+- "quais rotinas eu tenho?", "apaga a rotina modo jogo" (`/rotinas` no console)
+- Só você cria, apaga e dispara rotinas. Chat da live, tela, visitas, amigos na
+  call e o Modo Casca nunca disparam uma, e ela nunca roda rotina por iniciativa própria.
+- Até 8 passos. Uma rotina não chama outra e não usa ação proibida. Passo
+  inválido é recusado antes de ela perguntar.
+- Ficam em `data/rotinas.json`.
+
+## Minijogos
+
+Por voz ou pelo console, sem janela:
+
+| Diga | Jogo |
+|---|---|
+| "vamos jogar jogo da velha" | você é o X; casas de 1 a 9 ("5", "centro", "canto de cima à esquerda") |
+| "bora jogar forca" | ela pensa numa palavra e diz a categoria; "letra a", "é a letra erre", "é banana" |
+| "joga pedra papel e tesoura comigo" | melhor de 3; ela escolhe antes de ouvir a sua |
+| "quero jogar adivinhação" | número de 1 a 100 em 7 chances; ela diz "mais alto" ou "mais baixo" |
+
+- Com o jogo aberto, cada jogada vai direto para o jogo, sem gastar o modelo.
+  Se você falar de outra coisa, ela conversa normalmente e o jogo continua.
+- "desisto", "chega", "para o jogo" encerram. Depois do fim, "revanche" ou "de
+  novo" abre outra partida. Ela guarda o placar do dia.
+- No console, o tabuleiro aparece na tela (`/jogar velha` também abre).
+- No jogo da velha ela joga bem, mas de vez em quando se distrai: dá para ganhar.
+- As jogadas não vão para a memória dela, só o resultado de cada partida.
+
+## Clipes pelo OBS
+
+"Clipa isso!" e ela manda o OBS salvar os últimos segundos da sua tela (o
+**replay buffer**). Funciona com o OBS 28 ou mais novo, que já vem com o
+obs-websocket.
+
+No OBS:
+
+1. **Configurações > Saída > Gravação de Replay**: ative e escolha quantos segundos guardar.
+2. **Ferramentas > Configurações do Servidor WebSocket**: ative e copie a senha.
+
+```powershell
+pip install -e ".[obs]"
+```
+
+No `.env`: `OBS_ENABLED=true` e `OBS_PASSWORD=...`. Se o OBS estiver em outro PC
+(ou o núcleo da Akemi no servidor), ajuste `OBS_URL` (padrão `ws://127.0.0.1:4455`).
+
+- "clipa isso", "clipa aí", "salva esse clipe", "corta essa": vai na hora, sem
+  esperar o modelo (o momento passa rápido). Ela diz o nome do arquivo salvo.
+- Se o replay buffer estiver desligado, não tem o que salvar: ela liga na hora e
+  avisa que do próximo clipe em diante funciona (`OBS_REPLAY_AUTOSTART=false`
+  desliga isso).
+- Só você pede clipe. O chat da live não consegue (seria spam de clipes).
+
+## Modo chamada
+
+A Akemi na sua call do Discord (ou Zoom, Teams, WhatsApp, Telegram...).
+**Você** entra na call e ela entra **pelo seu microfone**: nada de clicar na
+interface do Discord.
+
+```text
+Diga "Akemi, entra na call"   → ela se apresenta para o pessoal
+"Akemi, avisa o pessoal que eu chego em 15 minutos" → ela fala na call
+Na call: "Akemi, que música é essa?" → ela responde na call
+"Akemi, sai da call"
+```
+
+**Preparação (uma vez, Windows):**
+
+1. Instale o [VB-CABLE](https://vb-cable.com) (gratuito, doação opcional).
+2. No `.env`: `CALL_OUTPUT_DEVICE=CABLE Input` (a voz dela vai para o cabo durante a call),
+   `SYSTEM_AUDIO_ENABLED=true` (para ela ouvir a call) e uma voz (`TTS_ENGINE=kokoro` ou `piper`).
+3. Para a **sua** voz também ir pelo cabo: Painel de Som do Windows > **Gravação** >
+   seu microfone > Propriedades > **Escutar** > marque "Escutar este dispositivo" e
+   escolha **CABLE Input**. O Windows mistura a sua voz e a dela no cabo.
+   (Quem preferir, o Voicemeeter faz a mesma mistura.)
+4. No Discord: **Configurações de Voz > Dispositivo de entrada = CABLE Output**.
+   Desligue o Cancelamento de Eco e a Supressão de Ruído do Discord para a voz dela
+   não ser cortada.
+5. Use **fone de ouvido** e, de preferência, o reconhecimento da sua voz
+   (`akemi --cadastrar-voz`, [VOZ.md](VOZ.md)).
+
+Como ela se comporta:
+
+- Ao entrar, **se apresenta e avisa que está ouvindo** ("não guardo o que vocês
+  falam"). Combine antes com o pessoal: ela transcreve o que é dito na call para
+  saber quando foi chamada. `CALL_ANNOUNCE=false` tira o aviso.
+- Responde quando alguém diz "Akemi", curto e com bom humor. O resto da conversa
+  ela só acompanha: **nada de comentário espontâneo** sobre o papo da call, e no
+  máximo 6 respostas por minuto.
+- O que os amigos falam fica **só na memória RAM, durante a call**, para ela ter
+  contexto. Não vai para a memória dela nem para a autoevolução, e é apagado quando
+  ela sai. Com cérebro na nuvem, o trecho vai no prompt quando ela responde.
+- **Tudo o que ela fala durante a call vai para a call**, inclusive respostas para
+  você. Ela é avisada para não falar nada pessoal seu ali.
+
+**Amigos pedem, você confirma** (`CALL_FRIENDS_CAN_ASK=true`, desligado por padrão):
+
+- Um amigo diz "Akemi, abre o Cyberpunk". Ela não abre: pergunta para você,
+  "Mateus, pediram na call: abrir programa (Cyberpunk). Você deixa?".
+- **Só o seu "sim"** (microfone com a sua voz, terminal ou app) executa. Um amigo
+  dizendo "sim" na call não vale.
+- Só ações de `CALL_FRIEND_ACTIONS` (padrão: abrir programa ou site, pesquisar,
+  música e volume). Fechar programa, rotinas, lembretes e o resto ficam de fora.
+
+**Segurança:** o que vem da call é `Trust.PUBLIC`, como o chat da live. Se a voz
+de um amigo vazar da caixa de som para o seu microfone e chegar como "você", ela
+percebe que acabou de ouvir aquilo na call e descarta.
+
+No modo servidor + PC, configure o `CALL_OUTPUT_DEVICE` no `.env` do PC (o corpo):
+o núcleo liga e desliga o cabo lá. O corpo avisa ao núcleo se tem o cabo.
+
+O que o modo chamada do Capri faz e este ainda não faz: clicar em "Entrar no
+canal de voz" sozinha, saber o nome de quem falou, painel de chamada na tela e
+ela falar por cima de risadas.
+
 ## O que ficou de fora (por enquanto)
 
-- **Entrar nas chamadas do Discord** por você: depende de clicar na interface do
-  Discord e de um cabo de áudio virtual. Grande demais para esta leva.
-- **Jogar seus jogos e minijogos** (xadrez, jogo da velha), **clipes** e
-  **desenhar na tela**.
-- **Mods e skins da loja do Capri**: o avatar já aceita skins locais em PNG.
-- **Capri VR** (Meta Quest).
+- **Jogar os seus jogos** (controlar teclado e mouse dentro do jogo) e **desenhar
+  na tela** (depende da janela do avatar, que está desativado).
+- **Mods e skins da loja do Capri**: mods com código são um risco de segurança e
+  repetem o papel da Oficina e da autoevolução. O avatar já aceita skins locais em PNG.
+- **Capri VR** (Meta Quest): é um projeto Unity separado.
