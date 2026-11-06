@@ -50,6 +50,16 @@ class AkemiServer:
         self.phone = CompanionHub(akemi, token)
         self.phone.install()
         akemi.bus.subscribe("speech.finished", self._on_speech_finished)
+        # Modo chamada: a voz dela no cabo virtual é coisa do corpo (o PC).
+        akemi.call.on_change.append(self._call_changed)
+        akemi.bus.subscribe("body.connected", self._resend_call)
+
+    def _call_changed(self, on: bool) -> None:
+        asyncio.get_running_loop().create_task(self.link.send("chamada", on=on))
+
+    async def _resend_call(self, event: Event) -> None:
+        if self.akemi.call.active:  # o corpo reconectou no meio da call
+            await self.link.send("chamada", on=True)
 
     # ------------------------------------------------------------- eventos
     async def _on_speech_finished(self, event: Event) -> None:

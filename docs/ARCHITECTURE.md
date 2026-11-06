@@ -42,6 +42,14 @@ VTuber de IA.
 | `brain/self_improve.py` | Autoevolução: propostas de mudança na persona, aprovadas pelo dono ([CAPRICORNIO.md](CAPRICORNIO.md)). |
 | `storage/chip.py` | Chip de identidade: exporta/importa persona, estado, memória e evolução (`akemi-chip`). |
 | `tts/base.py` | `Speaker`: único caminho para falar; interrompe quando o dono começa a falar. |
+| `avatar/` | Avatar de desktop (desativado por enquanto): janela Tk transparente que senta nas janelas, reage a `speech.*`, `casca.*` e ao humor ([CAPRI.md](CAPRI.md)). |
+| `casca/` | Modo Casca: hooks do Claude Code/Codex → `127.0.0.1` com token → `casca.*` (`Trust.PUBLIC`) e falas ([CAPRI.md](CAPRI.md)). |
+| `actions/when.py` | Entende "amanhã às 9h", "dia 5 de dezembro" para os lembretes (salvos em `data/lembretes.json`). |
+| `actions/lookout.py` | Vigia da tela: confere `ambient.screen` contra frases que o dono pediu. |
+| `actions/routines.py` | Rotinas: uma frase do dono roda várias ações já aprovadas (`run_approved`). |
+| `actions/obs.py` | Clipes: obs-websocket 5 → `SaveReplayBuffer`. |
+| `games/` | Minijogos por voz. Com o jogo aberto, as jogadas são atalhos da mente (sem modelo). |
+| `chamada.py` | Modo chamada: `ambient.audio` com "Akemi" → `call.message` (`Trust.PUBLIC`); pedido de amigo vira `propose` (só o "sim" do dono executa); `tts/mirror.py` põe a voz no cabo virtual. |
 
 ## Dois modelos
 
@@ -108,6 +116,17 @@ A Akemi pode rodar dividida em dois processos:
   links e markdown; bloqueia ofensas.
 - O chat é agrupado, deduplicado, com cooldown por usuário e limite por minuto.
 
+## Atalhos da mente
+
+Antes de chamar o modelo, a mente pergunta aos atalhos (`Mind.shortcuts`) se a
+fala do dono é com eles: "clipa isso", "entra na call", uma jogada com jogo
+aberto ou a frase de uma rotina. Atalho só responde a `Trust.OWNER`. Com
+`ShortcutReply(remember=False)`, a fala não vai para a memória (ex.: jogadas).
+
+Filtros: `Mind.ambient_filters` faz ela ignorar percepções (a conversa da call
+não gera comentário espontâneo) e `Mind.owner_filters` descarta um "dono" que não
+é o dono (a voz de um amigo da call vazando para o microfone).
+
 ## Protocolo de ações
 
 O modelo pede ações com tags no texto, que nunca são faladas:
@@ -139,5 +158,7 @@ async def tocar_musica(nome: str) -> str:
 4. ~~Servidor 24h~~ — núcleo (`net/server.py`, Docker) + corpo (`net/body.py`, PC)
    ligados por WebSocket na LAN. Ver "Núcleo e corpo" acima.
 5. Busca semântica (embeddings) na memória.
-6. Avatar (VTube Studio API) reagindo ao humor.
+6. Avatar — o avatar de desktop (`avatar/`) está pronto no código, com a boca seguindo
+   `speech.started`/`finished` e a cara seguindo o humor, mas desativado por enquanto
+   (falta testar no Windows). Depois: VTube Studio para a live.
 7. Self-improve por último.

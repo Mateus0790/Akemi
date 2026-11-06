@@ -46,7 +46,9 @@ class Action:
     tier: Tier = Tier.FREE
     params: dict[str, str] = field(default_factory=dict)  # nome -> descrição
     speak_result: bool = False  # se o retorno deve ser falado (ex.: horário)
-    confirm: str = ""  # pergunta de confirmação, com os parâmetros: "Fecho o {nome}?"
+    # Pergunta de confirmação, com os parâmetros: "Fecho o {nome}?". Pode ser uma função
+    # que recebe os parâmetros e devolve a pergunta (ou levanta ValueError se não fizer sentido).
+    confirm: str | Callable[..., str] = ""
     example: tuple[str, str] | None = None  # (pedido do dono, tag): modelos seguem exemplos
 
 
@@ -68,6 +70,12 @@ class ActionResult:
 class PendingConfirmation:
     call: ActionCall
     created_at: float = field(default_factory=time.time)
+
+
+def describe_call(call: ActionCall) -> str:
+    """ "abrir programa (Discord)": a ação em palavras, para perguntas e resumos."""
+    args = ", ".join(str(v) for v in call.args.values() if v not in (None, ""))
+    return f"{call.name.replace('_', ' ')}{f' ({args})' if args else ''}"
 
 
 def parse_action_calls(text: str) -> tuple[str, list[ActionCall]]:
@@ -96,10 +104,14 @@ class ActionRegistry:
         self.initiative_max_per_hour = 6
         self.initiative_repeat_gap_s = 1800.0
         self._initiative_log: list[tuple[float, str]] = []  # (quando, assinatura)
+        self.never_initiative: set[str] = set()  # nunca por conta própria (ex.: rodar rotina)
 
     def allow_initiative(self, names, max_per_hour: int = 6) -> None:
         """Define o que ela pode fazer por conta própria. Só ações FREE entram."""
-        self.initiative = {n for n in names if (a := self._actions.get(n)) and a.tier == Tier.FREE}
+        self.initiative = {
+            n for n in names
+            if (a := self._actions.get(n)) and a.tier == Tier.FREE and n not in self.never_initiative
+        }
         self.initiative_max_per_hour = max(0, int(max_per_hour))
 
     def register(
@@ -109,7 +121,7 @@ class ActionRegistry:
         tier: Tier = Tier.FREE,
         params: dict[str, str] | None = None,
         speak_result: bool = False,
-        confirm: str = "",
+        confirm: str | Callable[..., str] = "",
         example: tuple[str, str] | None = None,
     ) -> Callable[[ActionFn], ActionFn]:
         def deco(fn: ActionFn) -> ActionFn:
@@ -124,9 +136,9 @@ class ActionRegistry:
     def get(self, name: str) -> Action | None:
         return self._actions.get(name)
 
-    def describe_for_prompt(self) -> str:
-        """Lista das ações disponíveis, para colocar no prompt do dono."""
-        if not self._actions:
+    def describe_for_prompt(self, only: set[str] | None = None) -> str:
+        """Lista das ações disponíveis, para colocar no prompt do dono (``only`` filtra)."""
+        if not self._actions or (only is not None and not only & set(self._actions)):
             return ""
         lines = [
             "Você pode executar ações escrevendo, no fim da resposta, uma tag como "
@@ -136,7 +148,7 @@ class ActionRegistry:
             "Ações disponíveis:",
         ]
         for a in self._actions.values():
-            if a.tier == Tier.FORBIDDEN:
+            if a.tier == Tier.FORBIDDEN or (only is not None and a.name not in only):
                 continue
             ps = ", ".join(f"{k}: {v}" for k, v in a.params.items()) or "sem parâmetros"
             conf = " (pede confirmação)" if a.tier == Tier.CONFIRM else ""
@@ -191,11 +203,22 @@ class ActionRegistry:
         if action.tier == Tier.FORBIDDEN:
             return ActionResult(call.name, "denied", "ação proibida")
         if action.tier == Tier.CONFIRM:
+            try:
+                question = self._confirm_text(action, call)
+            except ValueError as exc:  # pedido sem sentido: nem pergunta
+                return ActionResult(call.name, "error", str(exc))
             self._pending = PendingConfirmation(call)
-            return ActionResult(call.name, "pending_confirmation", self._confirm_text(action, call))
+            return ActionResult(call.name, "pending_confirmation", question)
         return await self._run(action, call)
 
     def _confirm_text(self, action: Action, call: ActionCall) -> str:
+        if callable(action.confirm):
+            sig = inspect.signature(action.confirm)
+            accepted = {k: v for k, v in call.args.items() if k in sig.parameters}
+            try:
+                return action.confirm(**accepted) + " Diz sim ou não."
+            except TypeError as exc:
+                raise ValueError("faltou informação para isso") from exc
         if action.confirm:
             try:
                 return action.confirm.format(**call.args) + " Diz sim ou não."
@@ -221,6 +244,38 @@ class ActionRegistry:
             return ActionResult(pending.call.name, "denied", "dono recusou")
         action = self._actions[pending.call.name]
         return await self._run(action, pending.call)
+
+    def propose(self, call: ActionCall, allowed: set[str], who: str = "Pediram") -> ActionResult:
+        """Alguém que não é o dono pediu uma ação (ex.: amigo na call): vira pergunta ao dono.
+
+        Nada roda aqui. Só fica pendente, e só o "sim" do dono (``resolve_confirmation``
+        com ``Trust.OWNER``) executa. Fora da lista ``allowed`` ou proibida: negada.
+        """
+        action = self._actions.get(call.name)
+        if action is None:
+            return ActionResult(call.name, "unknown", "ação inexistente")
+        if call.name not in allowed or action.tier == Tier.FORBIDDEN:
+            return ActionResult(call.name, "denied", "fora do que podem pedir")
+        self._pending = PendingConfirmation(call)
+        return ActionResult(call.name, "pending_confirmation",
+                            f"{who}: {describe_call(call)}. Você deixa? Diz sim ou não.")
+
+    async def run_approved(self, call: ActionCall, trust: Trust) -> ActionResult:
+        """Um passo que o dono já aprovou antes (ex.: rotina confirmada ao ser criada).
+
+        Ainda exige origem do dono e nunca roda ação proibida; só não pergunta de novo.
+        """
+        action = self._actions.get(call.name)
+        if action is None:
+            return ActionResult(call.name, "unknown", "ação inexistente")
+        if trust < Trust.OWNER:
+            return ActionResult(call.name, "denied", "origem não confiável")
+        if action.tier == Tier.FORBIDDEN:
+            return ActionResult(call.name, "denied", "ação proibida")
+        return await self._run(action, call)
+
+    def names(self) -> list[str]:
+        return list(self._actions)
 
     async def execute_authorized(self, call: ActionCall) -> ActionResult:
         """Executa sem checar confiança nem pedir confirmação.

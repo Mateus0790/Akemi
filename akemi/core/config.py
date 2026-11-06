@@ -142,6 +142,31 @@ class Settings(BaseSettings):
     vision_provider: ProviderName | None = None  # default = brain_provider
     vision_describe_interval_s: float = 45.0
 
+    # --- Modo Casca: ela vira o corpo do Claude Code e do Codex (docs/CAPRI.md) ---
+    # auto = o que você ligou com "akemi --casca claude|codex|ambos"
+    casca: Literal["auto", "claude", "codex", "ambos", "desligado"] = "auto"
+    # nada = não fala (veja com /casca); importante = fala quando pedem seu OK, terminam ou dão erro
+    casca_voz: Literal["nada", "importante", "tudo"] = "importante"
+
+    # --- Clipes pelo OBS: "clipa isso" salva o replay buffer (docs/CAPRI.md) ---
+    obs_enabled: bool = False
+    obs_url: str = "ws://127.0.0.1:4455"  # obs-websocket 5 (OBS 28+)
+    obs_password: str = ""  # Ferramentas > Configurações do Servidor WebSocket
+    obs_replay_autostart: bool = True  # liga o replay buffer se estiver desligado
+
+    # --- Modo chamada: ela na sua call do Discord (docs/CAPRI.md) ---
+    call_output_device: str = ""  # cabo virtual da voz dela na call, ex. "CABLE Input"
+    call_announce: bool = True  # ao entrar, se apresenta e avisa que está ouvindo
+    call_friends_can_ask: bool = False  # amigos pedem ações e você confirma
+    call_friend_actions: list[str] = ["abrir_programa", "abrir_site", "pesquisar", "midia", "volume"]
+
+    # --- Avatar de desktop (docs/CAPRI.md): desativado por enquanto ---
+    avatar_enabled: bool = False  # experimental: só liga com AVATAR_ENABLED=true
+    avatar_scale: float = 1.0  # 0.5 a 3
+    avatar_skin: Path | None = None  # pasta com parado.png, piscando.png, falando.png...
+    avatar_perch: bool = True  # senta no topo da janela em foco (Windows)
+    avatar_sleep_after_s: float = 300.0  # sem nada acontecendo, ela cochila
+
     # --- Análise de arquivos (docs/ARQUIVOS.md) ---
     files_enabled: bool = True
     files_allowed_dirs: list[Path] = []  # sem nenhuma pasta liberada, a ação não existe

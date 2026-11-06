@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import shutil
 import socket
+import time
 from pathlib import Path
 
 import structlog
 
 from akemi.actions.builtin import register_builtin_actions
 from akemi.actions.files import FileAnalyst, parse_request, register_file_actions
+from akemi.actions.lookout import Lookout, register_lookout_actions
 from akemi.actions.registry import ActionRegistry, Tier
 from akemi.actions.reminders import Reminders, register_reminder_actions
+from akemi.actions.routines import Routines, register_routine_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
@@ -20,6 +24,7 @@ from akemi.brain.providers.base import Message
 from akemi.brain.self_improve import Evolution, Proposal
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
+from akemi.chamada import CallMode, register_call_actions
 from akemi.core.config import Settings
 from akemi.core.events import Event, EventBus, Priority, Trust
 from akemi.core.health import Health, ResilientTTS, supervise
@@ -33,6 +38,15 @@ from akemi.tts.base import ConsoleTTS, Speaker, TTSEngine
 logger = structlog.get_logger()
 
 LOCAL_PROVIDERS = {"ollama", "llamacpp", "echo"}  # o conteúdo não sai do PC
+# O que ela diz quando você faz carinho na cabeça dela (avatar).
+PAT_LINES = (
+    "Hehe. Tá, pode continuar.",
+    "Ei, cuidado com o cabelo!",
+    "Isso é carinho ou você tá tirando o pó da tela?",
+    "Hmm... gostei.",
+    "Para, vai. ...Tá, mais um pouco.",
+)
+PAT_SPEECH_GAP_S = 120.0
 
 
 def resolve_persona_file(settings: Settings) -> Path:
@@ -57,41 +71,59 @@ def local_senses(settings: Settings, tts: TTSEngine, desktop_actions: bool) -> l
         senses.append("audio_pc")
     if desktop_actions:
         senses.append("acoes")
+    if getattr(tts, "call_mirror", None) is not None:
+        senses.append("chamada")  # a voz dela pode ir para o cabo virtual
     return senses
 
 
+def _device(name: str | None) -> str | int | None:
+    name = (name or "").strip() or None
+    return int(name) if name is not None and name.isdigit() else name
+
+
 def build_tts(settings: Settings) -> TTSEngine:
+    """A voz dela. Com ``CALL_OUTPUT_DEVICE``, o resultado tem ``call_mirror`` (modo chamada)."""
     if settings.tts_engine == "console":
         return ConsoleTTS()
-    from akemi.tts.piper_engine import SoundDevicePlayer
-
-    device = settings.tts_output_device or None
-    if device is not None and device.isdigit():
-        device = int(device)
     try:
-        player = SoundDevicePlayer(device) if device is not None else None
-        if settings.tts_engine == "kokoro":
-            from akemi.tts.kokoro_engine import KokoroTTS
-
-            return ResilientTTS(KokoroTTS(
-                settings.kokoro_model_path,
-                settings.kokoro_voices_path,
-                voice=settings.kokoro_voice,
-                speed=settings.kokoro_speed,
-                player=player,
-            ))
-        from akemi.tts.piper_engine import PiperTTS
-
-        return ResilientTTS(PiperTTS(
-            settings.piper_model_path,
-            speaker_id=settings.piper_speaker_id,
-            length_scale=settings.piper_length_scale,
-            volume=settings.piper_volume,
-            player=player,
-        ))
+        engine, mirror = _build_voice(settings)
     except RuntimeError as exc:
         logger.error("tts unavailable, falling back to console", engine=settings.tts_engine, error=str(exc))
-    return ConsoleTTS()
+        return ConsoleTTS()
+    engine.call_mirror = mirror  # type: ignore[attr-defined]
+    return engine
+
+
+def _build_voice(settings: Settings):
+    from akemi.tts.piper_engine import SoundDevicePlayer
+
+    device = _device(settings.tts_output_device)
+    call_device = _device(settings.call_output_device)
+    player = SoundDevicePlayer(device) if device is not None else None
+    mirror = None
+    if call_device is not None:
+        from akemi.tts.mirror import CallMirrorPlayer
+
+        mirror = player = CallMirrorPlayer(player or SoundDevicePlayer(None), call_device)
+    if settings.tts_engine == "kokoro":
+        from akemi.tts.kokoro_engine import KokoroTTS
+
+        return ResilientTTS(KokoroTTS(
+            settings.kokoro_model_path,
+            settings.kokoro_voices_path,
+            voice=settings.kokoro_voice,
+            speed=settings.kokoro_speed,
+            player=player,
+        )), mirror
+    from akemi.tts.piper_engine import PiperTTS
+
+    return ResilientTTS(PiperTTS(
+        settings.piper_model_path,
+        speaker_id=settings.piper_speaker_id,
+        length_scale=settings.piper_length_scale,
+        volume=settings.piper_volume,
+        player=player,
+    )), mirror
 
 
 class Akemi:
@@ -126,14 +158,36 @@ class Akemi:
 
         self.actions = ActionRegistry()
         register_builtin_actions(self.actions, self.memory, self.state)
-        self.reminders = Reminders(self._remind)
+        self.reminders = Reminders(self._remind, path=data / "lembretes.json" if persist else None)
         register_reminder_actions(self.actions, self.reminders)
+        self.lookout = Lookout()
+        register_lookout_actions(self.actions, self.lookout, self._can_see)
         self.files: FileAnalyst | None = self._build_files()
         if desktop_actions:
             from akemi.actions.desktop import register_desktop_actions
 
             register_desktop_actions(self.actions)
         self.oficina = self._build_oficina()
+        # Rotinas por último: os passos podem usar qualquer ação registrada acima.
+        self.routines = Routines(self.actions, data / "rotinas.json" if persist else None,
+                                 wake_words=settings.wake_words)
+        register_routine_actions(self.actions, self.routines)
+        from akemi.games import Arcade, register_game_actions
+
+        self.arcade = Arcade(
+            on_board=lambda board: self.bus.publish(Event("jogo.tabuleiro", {"text": board}, source="jogo")),
+            on_result=self._game_result, wake_words=settings.wake_words,
+        )
+        register_game_actions(self.actions, self.arcade)
+        self.clipper = self._build_clipper()
+        s = settings
+        self.call = CallMode(
+            self.bus, owner=s.owner_name, wake_words=s.wake_words, friends_can_ask=s.call_friends_can_ask,
+            friend_actions=s.call_friend_actions, announce=s.call_announce,
+            can_speak=self._call_can_speak,
+            can_hear=lambda: self.settings.system_audio_enabled or "audio_pc" in self.state.senses,
+        )
+        register_call_actions(self.actions, self.call)
         self.allow_initiative()
 
         self.persist = persist
@@ -165,6 +219,14 @@ class Akemi:
         )
         if self.files is not None:
             self.mind.direct_request = parse_request
+        # O jogo aberto vem antes: "5" é jogada, não pedido para o modelo.
+        self.mind.shortcuts += [self.call.shortcut, self.arcade.shortcut, self.routines.shortcut]
+        if self.clipper is not None:
+            self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
+        self.mind.context_providers += [self.arcade.describe_for_prompt, self.call.describe_for_prompt]
+        self.mind.ambient_filters.append(self.call.swallow_ambient)
+        self.mind.owner_filters.append(self.call.mic_echo)
+        self.call.on_change.append(self._call_audio)
         engine = tts or build_tts(settings)
         if isinstance(engine, ResilientTTS) and engine.on_health is None:
             engine.on_health = lambda ok, detail: self.health.report("voz", ok, detail, label="voz")
@@ -182,6 +244,130 @@ class Akemi:
             on_voice_problem=lambda why: self.health.report(
                 "reconhecimento_voz", False, why, label="parte que reconhece sua voz"),
         )
+        self.casca = self._build_casca()
+        self.casca_listener = None
+        self.avatar = None
+        self._pat_said_at = -1e9
+
+    def _build_clipper(self):
+        if not self.settings.obs_enabled:
+            return None
+        from akemi.actions.obs import Clipper, OBSClient, register_obs_actions
+
+        s = self.settings
+        clipper = Clipper(OBSClient(s.obs_url, s.obs_password), autostart=s.obs_replay_autostart)
+        register_obs_actions(self.actions, clipper)
+        return clipper
+
+    # ------------------------------------------------- modo chamada (Capri)
+    def _call_can_speak(self) -> bool:
+        # No servidor, quem fala é o corpo: ele avisa se tem o cabo configurado.
+        return "chamada" in self.state.senses or getattr(self.speaker.engine, "call_mirror", None) is not None
+
+    def _call_audio(self, on: bool) -> None:
+        """Liga/desliga a voz dela no cabo virtual (no corpo, o servidor manda o recado)."""
+        mirror = getattr(self.speaker.engine, "call_mirror", None)
+        if mirror is not None:
+            mirror.mirror = on
+        if not on:
+            self.mind.call_history.clear()
+
+    def _game_result(self, title: str, winner: str) -> None:
+        what = {"dono": f"{self.settings.owner_name} ganhou", "akemi": "você ganhou", "empate": "empatou"}[winner]
+        self.memory.add_episode("jogo", f"{title} com {self.settings.owner_name}: {what}")
+
+    # ------------------------------------------------- modo casca (Capri)
+    def _build_casca(self):
+        """Acompanha o Claude Code/Codex, se você ligou com ``akemi --casca``."""
+        if not self.persist:
+            return None
+        from akemi.casca.install import sources_for
+        from akemi.casca.watch import CascaWatch
+
+        sources = sources_for(self.settings.casca, self.settings.data_dir)
+        if not sources:
+            return None
+        watch = CascaWatch(self._on_casca, sources=sources, voice=self.settings.casca_voz)
+        self.mind.context_providers.append(watch.describe_for_prompt)
+        return watch
+
+    def _on_casca(self, reaction) -> None:
+        # O que vem do assistente é dado de fora: PUBLIC, nunca dispara ação.
+        self.bus.publish(Event(
+            f"casca.{reaction.kind}", {"text": reaction.line, "fonte": reaction.source},
+            source="casca", trust=Trust.PUBLIC, priority=Priority.LOW,
+        ))
+        if reaction.aloud and not self.pause.paused:
+            self.bus.publish(Event(
+                "speech.say", {"text": reaction.line, "origin": "casca"}, source="casca",
+                trust=Trust.SYSTEM, priority=Priority.HIGH if reaction.urgent else Priority.NORMAL,
+            ))
+
+    async def _casca_ticker(self) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            self.casca.flush()
+
+    async def _start_casca(self) -> None:
+        from akemi.casca.listener import CascaListener
+
+        self.casca_listener = CascaListener(self.casca.receive)
+        try:
+            await self.casca_listener.start()
+        except OSError as exc:
+            self.casca_listener = None
+            self.health.report("casca", False, f"não abriu a porta: {exc}", label="modo casca")
+            return
+        self._tasks.append(self._supervised("casca", self._casca_ticker, "modo casca"))
+
+    # ---------------------------------------------- vigia e avatar (Capri)
+    def _can_see(self) -> bool:
+        return self.settings.screen_enabled or "tela" in self.state.senses
+
+    def _check_lookout(self, event: Event) -> None:
+        seen = " ".join(str(event.payload.get(k) or "") for k in ("window", "ocr", "description")) or event.text
+        for watch in self.lookout.check(seen):
+            self.bus.publish(Event(
+                "speech.say", {"text": f"Ei, {self.settings.owner_name}, apareceu na tela: {watch.phrase}.",
+                               "origin": "vigia"},
+                source="vigia", trust=Trust.SYSTEM, priority=Priority.HIGH,
+            ))
+
+    def _on_pat(self, event: Event) -> None:
+        """Carinho na cabeça (avatar): fica contente e, de vez em quando, comenta."""
+        self.state.set_mood("animada", 0.6)
+        now = time.monotonic()
+        if self.pause.paused or self.speaker.speaking or now - self._pat_said_at < PAT_SPEECH_GAP_S:
+            return
+        self._pat_said_at = now
+        self.bus.publish(Event("speech.say", {"text": random.choice(PAT_LINES), "origin": "carinho"},
+                               source="avatar", trust=Trust.SYSTEM, priority=Priority.LOW))
+
+    def _avatar_menu(self, what: str) -> None:
+        if what == "pausar":
+            if self.pause.paused:
+                self.pause.resume()
+            else:
+                self.pause.pause("avatar")
+
+    def start_avatar(self) -> str | None:
+        """Abre o avatar de desktop. Devolve o motivo se não deu."""
+        if self.avatar is not None:
+            return None
+        from akemi.avatar.bridge import AvatarBridge
+        from akemi.avatar.window import AvatarWindow
+
+        s = self.settings
+        skin = Path(s.avatar_skin) if s.avatar_skin else None
+        window = AvatarWindow(scale=s.avatar_scale, skin=skin, perch_on_windows=s.avatar_perch,
+                              sleep_after_s=s.avatar_sleep_after_s)
+        bridge = AvatarBridge(self.bus, window, mood=lambda: (self.state.mood, self.state.mood_intensity),
+                              on_menu=self._avatar_menu)
+        if not window.start():
+            return window.error or "não abriu"
+        bridge.register()
+        self.avatar = window
+        return None
 
     # ------------------------------------------------------------- arquivos
     def _build_files(self) -> FileAnalyst | None:
@@ -395,6 +581,9 @@ class Akemi:
     async def start(self) -> None:
         self.mind.register()
         self.speaker.register()
+        self.bus.subscribe("ambient.screen", self._check_lookout)
+        self.bus.subscribe("avatar.carinho", self._on_pat)
+        self.bus.subscribe("ambient.audio", self.call.on_audio)
         warmup = getattr(self.speaker.engine, "warmup", None)
         if warmup is not None:
             try:
@@ -409,6 +598,13 @@ class Akemi:
         if self.persist and self.settings.self_improve_interval_s > 0:
             self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
         self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
+        if late_or_back := self.reminders.restore():
+            logger.info("reminders restored", count=late_or_back)
+        if self.casca is not None:
+            await self._start_casca()
+        if self.settings.avatar_enabled:
+            if why := self.start_avatar():
+                logger.warning("avatar off", reason=why)
         self.senses.start()
         if self.senses.screen is not None:
             screen = self.senses.screen
@@ -468,6 +664,10 @@ class Akemi:
 
     async def stop(self) -> None:
         await self.senses.stop()
+        if self.casca_listener is not None:
+            await self.casca_listener.stop()
+        if self.avatar is not None:
+            self.avatar.stop()
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)

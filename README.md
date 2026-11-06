@@ -56,7 +56,18 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
 
-**Ainda falta:** avatar.
+- **Ideias do [Capri](https://github.com/lachydotmcg/capri-desktop)** ([docs/CAPRI.md](docs/CAPRI.md)):
+  - **Modo Casca** (`akemi --casca claude`): ela vira o corpo do Claude Code e do Codex
+    enquanto eles trabalham e avisa quando pedem seu OK ou terminam
+  - **lembretes com data** ("dia 5 de dezembro às 9h") que sobrevivem a um reinício
+  - **vigia da tela**: "me avisa quando aparecer download concluído"
+  - **rotinas de voz**: "quando eu disser 'modo jogo', abre o Discord e abaixa o volume"
+  - **minijogos por voz**: jogo da velha, forca, pedra-papel-tesoura e adivinhação
+  - **clipes pelo OBS**: "clipa isso" salva os últimos segundos da tela
+  - **modo chamada**: "Akemi, entra na call" e ela fala e responde na sua call do Discord
+
+**Ainda falta:** avatar. Um avatar de desktop já está no código (`akemi/avatar/`),
+mas fica desativado por enquanto ([docs/CAPRI.md](docs/CAPRI.md#avatar-de-desktop-desativado-por-enquanto)).
 
 ## Instalação
 
@@ -98,6 +109,11 @@ Comandos no console:
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
 | `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
 | `/chip <arquivo>` | grava a identidade dela num chip |
+| `/casca` | o que o Claude Code/Codex estão fazendo ([docs/CAPRI.md](docs/CAPRI.md)) |
+| `/lembretes`, `/vigias` | lembretes pendentes; o que ela está vigiando na tela |
+| `/rotinas` | suas rotinas de voz |
+| `/jogar <jogo>` | velha, forca, pedra ou adivinhacao (ou diga "vamos jogar forca") |
+| `/chamada` | entra ou sai da call de voz ([docs/CAPRI.md](docs/CAPRI.md#modo-chamada)) |
 
 ## Voz
 
@@ -250,12 +266,17 @@ Peça por voz ou pelo terminal:
 | "aumenta o volume", "abaixa o som 20%" | volume do Windows | não |
 | "pesquisa receita de bolo no YouTube" | abre a pesquisa no navegador | não |
 | "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
+| "me lembra amanhã às 9h de ligar pro dentista" | lembrete com data (fica salvo) | não |
+| "me avisa quando aparecer download concluído" | vigia a tela (com `--tela`) | não |
+| "quando eu disser modo jogo, abre o Discord e baixa o volume" | cria uma rotina | **sim**, ao criar |
+| "clipa isso" | salva o replay buffer do OBS (`OBS_ENABLED`) | não |
+| "Akemi, entra na call" | modo chamada ([docs/CAPRI.md](docs/CAPRI.md#modo-chamada)) | não |
 | "lembra que eu gosto de café sem açúcar" | guarda na memória | não |
 
 Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
 live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as
-"livres". Lembretes ficam na memória do processo: reiniciar a Akemi apaga os
-pendentes. As ações do PC funcionam no Windows.
+"livres". Lembretes ficam em `data/lembretes.json` e sobrevivem a um reinício. As
+ações do PC funcionam no Windows.
 
 No modo servidor + corpo, o núcleo decide (confere que foi você e pede o "sim")
 e o corpo executa no PC. O corpo só aceita as ações da lista acima, então nem
@@ -294,6 +315,16 @@ código numa cópia isolada, roda os testes e abre um PR como rascunho para voc�
 revisar. Ela nunca faz merge, não mexe nos arquivos de segurança e fica
 desligada até você configurar um token. Veja [docs/OFICINA.md](docs/OFICINA.md).
 
+## Modo Casca
+
+```powershell
+akemi --casca claude       # ela vira o corpo do Claude Code (codex | ambos | desligar)
+```
+
+O Modo Casca liga hooks no Claude Code/Codex sem mexer nos seus outros hooks,
+escuta só em 127.0.0.1 com token e nunca aprova nada por você. Detalhes e
+segurança em [docs/CAPRI.md](docs/CAPRI.md).
+
 ## Contribuindo
 
 Veja [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -301,3 +332,8 @@ Veja [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Licença
 
 Apache 2.0 — veja [LICENSE](LICENSE).
+
+O Modo Casca, os lembretes com data, o vigia da tela, as rotinas, os minijogos, os
+clipes, o modo chamada e o avatar (ainda desativado) foram inspirados
+no [Capri](https://github.com/lachydotmcg/capri-desktop) e reescritos do zero:
+nenhum código ou arte dele foi copiado (o Capri usa uma licença não comercial).

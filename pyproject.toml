@@ -80,6 +80,12 @@ self-improve = [
 windows = [
     "pywin32==306",
 ]
+obs = [
+    "websockets>=15,<18",  # clipes pelo obs-websocket
+]
+avatar = [
+    "Pillow>=10.4",  # só para skins em PNG; o avatar desenhado usa só o tkinter
+]
 dev = [
     "pytest==8.3.3",
     "pytest-asyncio==0.24.0",
