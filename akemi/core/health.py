@@ -10,8 +10,9 @@ Três peças:
   reinicia com espera crescente (1 s, 2 s, 4 s... até 60 s). Um bug num
   sentido nunca derruba a Akemi inteira nem fica morto para sempre.
 - :class:`ResilientTTS`: se a voz falhar várias vezes seguidas, ela passa a
+  falar com a voz reserva (a local, quando a principal é o Fish Audio) ou a
   escrever no terminal (nada do que ia falar se perde) e de tempos em tempos
-  tenta a voz de novo.
+  tenta a voz principal de novo.
 """
 
 from __future__ import annotations
@@ -131,8 +132,9 @@ class ResilientTTS(TTSEngine):
     """Voz que se recupera sozinha.
 
     Depois de ``max_failures`` erros seguidos, passa a usar o ``fallback``
-    (terminal). A cada ``retry_after_s`` tenta a voz de verdade de novo; se
-    der certo, volta a falar. Uma frase que falha na voz sai no reserva, então
+    (terminal, ou a voz local reserva quando a principal é o Fish Audio). A
+    cada ``retry_after_s`` tenta a voz principal de novo; se der certo, volta
+    a falar com ela. Uma frase que falha na voz sai no reserva, então
     nada se perde.
     """
 
@@ -167,6 +169,13 @@ class ResilientTTS(TTSEngine):
                 await warm()
             except Exception as exc:
                 self._degrade(f"não carregou: {exc}")
+        # A reserva já fica carregada: se a principal cair, ela assume na hora.
+        backup = getattr(self.fallback, "warmup", None)
+        if backup is not None:
+            try:
+                await backup()
+            except Exception as exc:
+                logger.warning("backup voice failed to load", error=str(exc))
 
     def _degrade(self, why: str) -> None:
         if self.degraded_at is None:

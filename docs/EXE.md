@@ -1,7 +1,7 @@
 # Akemi.exe: a Akemi sem instalar Python
 
 O `Akemi.exe` é a Akemi inteira empacotada com o PyInstaller: Python, voz
-(Piper e Kokoro), microfone, Whisper, visão, áudio do PC, corpo e servidor. É
+(Fish Audio, Piper e Kokoro), microfone, Whisper, visão, áudio do PC, corpo e servidor. É
 só baixar, extrair e abrir.
 
 ## Baixar
@@ -48,7 +48,10 @@ Para guardar o `.env` e a `data/` em outra pasta, defina a variável de ambiente
 
 São arquivos grandes ou seus, e ficam na pasta ao lado do `.exe`, como no README:
 
-- **Modelos de voz** (`data/voices/...`): os mesmos comandos de download do README.
+- **Fish Audio** (voz principal): não tem nada para baixar, só a `FISH_API_KEY`
+  e o `FISH_VOICE_ID` no `.env`.
+- **Modelos de voz locais** (`data/voices/...`, Piper e Kokoro, que também são a
+  voz reserva do Fish Audio): os mesmos comandos de download do README.
   O `python -m piper.download_voices` precisa de Python; sem ele, baixe o `.onnx`
   e o `.onnx.json` da voz direto do
   [Hugging Face do Piper](https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR)
@@ -72,7 +75,7 @@ No Windows, com Python 3.11+:
 ```powershell
 python -m venv venv
 venv\Scripts\activate
-pip install ".[exe,audio,stt,mic,vision,tts,kokoro,voz,arquivos,servidor,obs,windows]"
+pip install ".[exe,audio,stt,mic,vision,tts,kokoro,fish,voz,arquivos,servidor,obs,windows]"
 pyinstaller packaging/akemi.spec --noconfirm
 ```
 

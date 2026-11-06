@@ -124,13 +124,46 @@ Comandos no console:
 
 ## Voz
 
+### Voz principal: Fish Audio
+
+A voz principal da Akemi é o [Fish Audio](https://fish.audio): qualidade de
+estúdio, voz feminina natural (ou a que você clonar) e o áudio começa a tocar
+enquanto ainda está chegando.
+
+```powershell
+pip install -e ".[fish]"
+```
+
+No `.env`:
+
+```
+TTS_ENGINE=fish
+FISH_API_KEY=sua-chave              # https://fish.audio/app/api-keys
+FISH_VOICE_ID=id-da-voz             # o final do link fish.audio/m/<id>
+# FISH_MODEL=s2.1-pro-free          # grátis, para testar
+```
+
+Depois é só `akemi --voz` (com `FISH_API_KEY` no `.env`, o `--voz` já escolhe
+o Fish mesmo sem `TTS_ENGINE`). Escolha ou clone a voz em
+[fish.audio](https://fish.audio) e copie o id do link dela para o
+`FISH_VOICE_ID`. `FISH_SPEED` ajusta a velocidade e `FISH_LATENCY=normal`
+troca um pouco de rapidez por qualidade.
+
+**Voz reserva:** o Fish Audio precisa de internet e de créditos. Se ele cair,
+a frase sai na hora numa voz local (Kokoro ou Piper, a que você tiver
+baixado; veja abaixo) e ela tenta o Fish de novo a cada minuto. Nada do que
+ela ia falar se perde. `TTS_FALLBACK` escolhe a reserva (`auto`, `kokoro`,
+`piper` ou `console`). `/saude` mostra se a voz principal está de pé.
+
+### Voz local (Piper)
+
 ```powershell
 pip install -e ".[tts]"
 python -m piper.download_voices pt_BR-faber-medium --data-dir data/voices
 akemi --voz
 ```
 
-Para deixar a voz ligada sempre, coloque `TTS_ENGINE=piper` no `.env`. Outras
+Para usar o Piper como voz principal, coloque `TTS_ENGINE=piper` no `.env`. Outras
 vozes pt-BR: `pt_BR-cadu-medium`, `pt_BR-jeff-medium`, `pt_BR-edresson-low`
 (troque também `PIPER_MODEL_PATH`). `PIPER_LENGTH_SCALE` ajusta a velocidade.
 
