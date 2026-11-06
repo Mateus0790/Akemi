@@ -6,6 +6,7 @@ import pytest
 
 from akemi.actions.desktop import VK, StartApp, StartMenu, Window, find_windows, register_desktop_actions
 from akemi.actions.registry import ActionCall, ActionRegistry
+from akemi.actions.system import System
 from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.core.events import Trust
 
@@ -48,13 +49,21 @@ def test_start_menu_unknown_program():
     assert launched == []
 
 
-def make(windows=()):
+class MuteOnly(System):
+    def __init__(self):
+        self.muted = []
+
+    def set_mute(self, mute):
+        self.muted.append(mute)
+
+
+def make(windows=(), system=None):
     reg = ActionRegistry()
     m, launched = menu()
     keys, closed, urls = [], [], []
     register_desktop_actions(
         reg, start_menu=m, press=lambda vk, n: keys.append((vk, n)),
-        windows=lambda: list(windows), close=closed.append, open_url=urls.append,
+        windows=lambda: list(windows), close=closed.append, open_url=urls.append, system=system or MuteOnly(),
     )
     return reg, launched, keys, closed, urls
 
@@ -75,16 +84,18 @@ async def test_open_program_runs_directly_for_owner_only():
 
 @pytest.mark.asyncio
 async def test_media_and_volume_keys():
-    reg, _, keys, *_ = make()
+    system = MuteOnly()
+    reg, _, keys, *_ = make(system=system)
     for cmd in ("pausar", "tocar", "próxima", "anterior"):
         assert (await run(reg, "midia", comando=cmd)).status == "executed"
     await run(reg, "volume", comando="subir", quanto="20%")
     await run(reg, "volume", comando="baixar")
-    await run(reg, "volume", comando="mutar")
+    await run(reg, "volume", comando="mutar")  # mudo de verdade, não a tecla que alterna
     assert keys == [
         (VK["tocar_pausar"], 1), (VK["tocar_pausar"], 1), (VK["proxima"], 1), (VK["anterior"], 1),
-        (VK["volume_mais"], 10), (VK["volume_menos"], 5), (VK["mutar"], 1),
+        (VK["volume_mais"], 10), (VK["volume_menos"], 5),
     ]
+    assert system.muted == [True]
     assert (await run(reg, "midia", comando="dançar")).status == "error"
 
 

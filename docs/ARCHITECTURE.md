@@ -94,11 +94,12 @@ A Akemi pode rodar dividida em dois processos:
 - Um corpo novo substitui o anterior (4409). Sem corpo, a fala é descartada e
   ela continua pensando e respondendo no chat.
 - `GET /saude` responde em HTTP para o healthcheck do Docker.
-- Ações do PC (`actions/desktop.py`, `PC_ACTIONS`): no núcleo são registradas
-  com os mesmos metadados do modo local, mas a função manda `action` ao corpo e
-  espera `action_result`. A checagem de dono e o "sim" acontecem no núcleo; o
-  corpo executa com `execute_authorized` e recusa qualquer nome fora de
-  `PC_ACTIONS`. Lembretes rodam no núcleo e falam pelo corpo.
+- Ações do PC (`actions/desktop.py` e `actions/system.py`, `PC_ACTIONS`): no
+  núcleo são registradas com os mesmos metadados do modo local, mas a função
+  manda `action` ao corpo e espera `action_result`. A checagem de dono e o "sim"
+  acontecem no núcleo; o corpo executa com `execute_authorized` e recusa
+  qualquer nome fora de `PC_ACTIONS`. Um desligamento marcado ("daqui a uma
+  hora") fica no relógio do corpo. Lembretes rodam no núcleo e falam pelo corpo.
 
 ## Segurança
 
