@@ -74,7 +74,22 @@ class Settings(BaseSettings):
     chat_max_replies_per_minute: int = 6
 
     # --- Voz ---
-    tts_engine: Literal["console", "piper", "kokoro"] = "console"
+    tts_engine: Literal["console", "piper", "kokoro", "fish"] = "console"
+    # Voz reserva: se a principal falhar (Fish Audio sem internet ou sem
+    # créditos), a frase sai nesta. auto = com Fish, a voz local que você
+    # tiver baixado (Kokoro, depois Piper); senão, o terminal.
+    tts_fallback: Literal["auto", "console", "piper", "kokoro"] = "auto"
+    # Fish Audio: voz principal na nuvem. Ver akemi/tts/fish_engine.py
+    fish_api_key: str = ""
+    fish_voice_id: str = ""  # id da voz (final de fish.audio/m/<id>); vazio = voz padrão
+    fish_model: str = "s2.1-pro"  # s2.1-pro-free = grátis, para testar
+    fish_latency: Literal["low", "normal", "balanced"] = "balanced"  # balanced/low começam a falar antes
+    fish_speed: float = 1.0  # 0.5 a 2.0, >1 fala mais rápido
+    fish_volume_db: float = 0.0  # ganho em dB (ex. -3 mais baixo, 3 mais alto)
+    fish_language: str = ""  # vazio = detecta sozinho; ex. "pt"
+    fish_sample_rate: int = 44100
+    fish_base_url: str = "https://api.fish.audio"
+    fish_timeout_s: float = 20.0
     # Kokoro: voz feminina pt-BR (pf_dora). Ver akemi/tts/kokoro_engine.py
     kokoro_model_path: Path = Path("data/voices/kokoro/kokoro-v1.0.int8.onnx")
     kokoro_voices_path: Path = Path("data/voices/kokoro/voices-v1.0.bin")

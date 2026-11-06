@@ -247,7 +247,7 @@ Na call: "Akemi, que música é essa?" → ela responde na call
 
 1. Instale o [VB-CABLE](https://vb-cable.com) (gratuito, doação opcional).
 2. No `.env`: `CALL_OUTPUT_DEVICE=CABLE Input` (a voz dela vai para o cabo durante a call),
-   `SYSTEM_AUDIO_ENABLED=true` (para ela ouvir a call) e uma voz (`TTS_ENGINE=kokoro` ou `piper`).
+   `SYSTEM_AUDIO_ENABLED=true` (para ela ouvir a call) e uma voz (`TTS_ENGINE=fish`, `kokoro` ou `piper`).
 3. Para a **sua** voz também ir pelo cabo: Painel de Som do Windows > **Gravação** >
    seu microfone > Propriedades > **Escutar** > marque "Escutar este dispositivo" e
    escolha **CABLE Input**. O Windows mistura a sua voz e a dela no cabo.

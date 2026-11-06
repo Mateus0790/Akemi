@@ -30,7 +30,7 @@ jobs:
       - name: Instalar a Akemi com os extras do PC
         run: |
           python -m pip install --upgrade pip
-          pip install ".[exe,audio,stt,mic,vision,tts,kokoro,voz,arquivos,servidor,obs,windows]"
+          pip install ".[exe,audio,stt,mic,vision,tts,kokoro,fish,voz,arquivos,servidor,obs,windows]"
 
       - name: Gerar o Akemi.exe
         run: pyinstaller packaging/akemi.spec --noconfirm

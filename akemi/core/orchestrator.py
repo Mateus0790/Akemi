@@ -94,6 +94,63 @@ def build_tts(settings: Settings) -> TTSEngine:
     return engine
 
 
+def default_voice(settings: Settings) -> str:
+    """A voz do ``--voz`` quando o .env não escolhe: Fish Audio se tiver chave, senão Piper."""
+    return "fish" if settings.fish_api_key.strip() else "piper"
+
+
+def fallback_voice(settings: Settings) -> str:
+    """Qual voz assume quando a principal falha (``TTS_FALLBACK``)."""
+    choice = settings.tts_fallback
+    if choice == "auto":
+        if settings.tts_engine != "fish":
+            return "console"  # voz local cai para o terminal, como sempre
+        if settings.kokoro_model_path.exists() and settings.kokoro_voices_path.exists():
+            return "kokoro"
+        if settings.piper_model_path.exists():
+            return "piper"
+        return "console"
+    return "console" if choice == settings.tts_engine else choice
+
+
+def _voice_engine(name: str, settings: Settings, player) -> TTSEngine:
+    if name == "fish":
+        from akemi.tts.fish_engine import FishAudioTTS
+
+        return FishAudioTTS(
+            settings.fish_api_key,
+            voice_id=settings.fish_voice_id,
+            model=settings.fish_model,
+            base_url=settings.fish_base_url,
+            latency=settings.fish_latency,
+            speed=settings.fish_speed,
+            volume_db=settings.fish_volume_db,
+            language=settings.fish_language,
+            sample_rate=settings.fish_sample_rate,
+            timeout_s=settings.fish_timeout_s,
+            player=player,
+        )
+    if name == "kokoro":
+        from akemi.tts.kokoro_engine import KokoroTTS
+
+        return KokoroTTS(
+            settings.kokoro_model_path,
+            settings.kokoro_voices_path,
+            voice=settings.kokoro_voice,
+            speed=settings.kokoro_speed,
+            player=player,
+        )
+    from akemi.tts.piper_engine import PiperTTS
+
+    return PiperTTS(
+        settings.piper_model_path,
+        speaker_id=settings.piper_speaker_id,
+        length_scale=settings.piper_length_scale,
+        volume=settings.piper_volume,
+        player=player,
+    )
+
+
 def _build_voice(settings: Settings):
     from akemi.tts.piper_engine import SoundDevicePlayer
 
@@ -105,25 +162,12 @@ def _build_voice(settings: Settings):
         from akemi.tts.mirror import CallMirrorPlayer
 
         mirror = player = CallMirrorPlayer(player or SoundDevicePlayer(None), call_device)
-    if settings.tts_engine == "kokoro":
-        from akemi.tts.kokoro_engine import KokoroTTS
-
-        return ResilientTTS(KokoroTTS(
-            settings.kokoro_model_path,
-            settings.kokoro_voices_path,
-            voice=settings.kokoro_voice,
-            speed=settings.kokoro_speed,
-            player=player,
-        )), mirror
-    from akemi.tts.piper_engine import PiperTTS
-
-    return ResilientTTS(PiperTTS(
-        settings.piper_model_path,
-        speaker_id=settings.piper_speaker_id,
-        length_scale=settings.piper_length_scale,
-        volume=settings.piper_volume,
-        player=player,
-    )), mirror
+    main = _voice_engine(settings.tts_engine, settings, player)
+    backup = None
+    if (name := fallback_voice(settings)) != "console":
+        # A reserva também se cura sozinha: se ela falhar, cai para o terminal.
+        backup = ResilientTTS(_voice_engine(name, settings, player))
+    return ResilientTTS(main, fallback=backup), mirror
 
 
 class Akemi:

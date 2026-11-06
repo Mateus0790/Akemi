@@ -59,6 +59,9 @@ kokoro = [
     "kokoro-onnx>=0.4,<1",
     "sounddevice>=0.4.6",
 ]
+fish = [
+    "sounddevice>=0.4.6",  # Fish Audio: a voz vem da nuvem (httpx já é dependência)
+]
 servidor = [
     "websockets>=15,<18",
 ]

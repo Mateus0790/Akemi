@@ -208,3 +208,212 @@ def test_player_blocks_are_whole_samples(monkeypatch):
 
     SoundDevicePlayer().play(b"\x00\x01" * 22050, 22050, 1, threading.Event())
     assert sum(writes) == 44100 and writes[0] == 2204
+
+
+# -------------------------------------------------------------- Fish Audio
+def fish_client(handler):
+    import httpx
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def pcm_response(chunks, status=200):
+    import httpx
+
+    def stream():
+        yield from chunks
+
+    return httpx.Response(status, content=stream())
+
+
+@pytest.mark.asyncio
+async def test_fish_streams_pcm_with_voice_and_model():
+    import json
+
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers["authorization"]
+        seen["model"] = request.headers["model"]
+        seen["body"] = json.loads(request.content)
+        # pedaços ímpares: a fronteira cai no meio de uma amostra int16
+        return pcm_response([b"\x01", b"\x00\x02\x00", b"\x03"])
+
+    player = FakePlayer()
+    tts = FishAudioTTS("chave", voice_id="voz-akemi", speed=1.1, client=fish_client(handler),
+                       player=player, sample_rate=24000, block_ms=0)
+    await tts.speak("Oi, Mateus!")
+    assert seen["url"] == "https://api.fish.audio/v1/tts"
+    assert seen["auth"] == "Bearer chave" and seen["model"] == "s2.1-pro"
+    body = seen["body"]
+    assert body["text"] == "Oi, Mateus!" and body["reference_id"] == "voz-akemi"
+    assert body["format"] == "pcm" and body["sample_rate"] == 24000
+    assert body["prosody"] == {"speed": 1.1, "volume": 0.0}
+    assert "language" not in body  # vazio = o Fish detecta sozinho
+    assert all(len(pcm) % 2 == 0 and sr == 24000 and ch == 1 for pcm, sr, ch in player.played)
+    assert b"".join(p[0] for p in player.played) == b"\x01\x00\x02\x00"  # o byte solto do fim é descartado
+
+
+@pytest.mark.asyncio
+async def test_fish_without_voice_id_uses_default_voice():
+    import json
+
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return pcm_response([b"\x00\x00" * 10])
+
+    tts = FishAudioTTS("k", client=fish_client(handler), player=FakePlayer())
+    await tts.speak("oi")
+    assert "reference_id" not in bodies[0] and "prosody" not in bodies[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "expected"), [
+    (401, "FISH_API_KEY"), (402, "créditos"), (404, "FISH_VOICE_ID"), (503, "fora do ar"),
+])
+async def test_fish_http_errors_are_explained(status, expected):
+    import httpx
+
+    from akemi.tts.fish_engine import FishAudioError, FishAudioTTS
+
+    def handler(request):
+        return httpx.Response(status, json={"status": status, "message": "nope"})
+
+    player = FakePlayer()
+    tts = FishAudioTTS("k", voice_id="x", client=fish_client(handler), player=player)
+    with pytest.raises(FishAudioError, match=expected):
+        await tts.speak("oi")
+    assert player.played == []
+
+
+@pytest.mark.asyncio
+async def test_fish_offline_raises_so_the_backup_voice_speaks():
+    import httpx
+
+    from akemi.core.health import ResilientTTS
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    def handler(request):
+        raise httpx.ConnectError("sem internet", request=request)
+
+    class Backup(TTSEngine):
+        def __init__(self):
+            self.said = []
+
+        async def speak(self, text):
+            self.said.append(text)
+
+    backup = Backup()
+    tts = ResilientTTS(FishAudioTTS("k", client=fish_client(handler), player=FakePlayer()), fallback=backup)
+    await tts.speak("a frase não se perde")
+    assert backup.said == ["a frase não se perde"]
+
+
+@pytest.mark.asyncio
+async def test_fish_cut_mid_speech_does_not_repeat_in_backup():
+    import httpx
+
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    def handler(request):
+        def stream():
+            yield b"\x00\x01" * 50
+            raise httpx.ReadError("caiu", request=request)
+
+        return httpx.Response(200, content=stream())
+
+    player = FakePlayer()
+    tts = FishAudioTTS("k", client=fish_client(handler), player=player, block_ms=0)
+    await tts.speak("começou e caiu")  # não levanta: já tinha começado a falar
+    assert len(player.played) == 1
+
+
+@pytest.mark.asyncio
+async def test_fish_stops_quickly_when_interrupted():
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    def handler(request):
+        return pcm_response([b"\x00\x00" * 100] * 50)
+
+    player = FakePlayer(delay=0.05)
+    tts = FishAudioTTS("k", client=fish_client(handler), player=player, block_ms=0)
+    task = asyncio.create_task(tts.speak("uma fala bem longa"))
+    await asyncio.sleep(0.12)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0.1)
+    assert 0 < len(player.played) < 10
+
+
+def test_fish_without_key_explains_where_to_get_one():
+    from akemi.tts.fish_engine import FishAudioError, FishAudioTTS
+
+    with pytest.raises(FishAudioError, match="FISH_API_KEY"):
+        FishAudioTTS("", player=FakePlayer()).load()
+
+
+def test_build_tts_fish_with_local_backup(tmp_path):
+    from akemi.core.health import ResilientTTS
+    from akemi.tts.fish_engine import FishAudioTTS
+    from akemi.tts.kokoro_engine import KokoroTTS
+
+    model, voices = tmp_path / "k.onnx", tmp_path / "v.bin"
+    model.write_bytes(b"x")
+    voices.write_bytes(b"x")
+    s = Settings(_env_file=None, tts_engine="fish", fish_api_key="k", fish_voice_id="abc",
+                 fish_model="s2.1-pro-free", kokoro_model_path=model, kokoro_voices_path=voices)
+    tts = build_tts(s)
+    assert isinstance(tts, ResilientTTS) and isinstance(tts.engine, FishAudioTTS)
+    assert tts.engine.voice_id == "abc" and tts.engine.model == "s2.1-pro-free"
+    # Reserva: a voz local baixada, ela mesma com autocura (cai para o terminal)
+    assert isinstance(tts.fallback, ResilientTTS) and isinstance(tts.fallback.engine, KokoroTTS)
+
+
+def test_fallback_voice_choice(tmp_path):
+    from akemi.core.orchestrator import default_voice, fallback_voice
+
+    nothing = {"kokoro_model_path": tmp_path / "x", "piper_model_path": tmp_path / "y"}
+    piper = tmp_path / "p.onnx"
+    piper.write_bytes(b"x")
+    assert fallback_voice(Settings(_env_file=None, tts_engine="fish", **nothing)) == "console"
+    assert fallback_voice(Settings(_env_file=None, tts_engine="fish", kokoro_model_path=tmp_path / "x",
+                                   piper_model_path=piper)) == "piper"
+    assert fallback_voice(Settings(_env_file=None, tts_engine="piper", piper_model_path=piper)) == "console"
+    assert fallback_voice(Settings(_env_file=None, tts_engine="kokoro", tts_fallback="piper")) == "piper"
+    assert fallback_voice(Settings(_env_file=None, tts_engine="piper", tts_fallback="piper")) == "console"
+    assert default_voice(Settings(_env_file=None, fish_api_key="k")) == "fish"
+    assert default_voice(Settings(_env_file=None)) == "piper"
+
+
+@pytest.mark.asyncio
+async def test_missing_fish_key_degrades_to_backup_at_startup():
+    from akemi.core.health import ResilientTTS
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    class Backup(TTSEngine):
+        def __init__(self):
+            self.warm, self.said = False, []
+
+        async def warmup(self):
+            self.warm = True
+
+        async def speak(self, text):
+            self.said.append(text)
+
+    backup = Backup()
+    health = []
+    tts = ResilientTTS(FishAudioTTS("", player=FakePlayer()), fallback=backup,
+                       on_health=lambda ok, why: health.append((ok, why)))
+    await tts.warmup()
+    assert backup.warm and tts.degraded
+    assert health and health[0][0] is False and "FISH_API_KEY" in health[0][1]
+    await tts.speak("oi")
+    assert backup.said == ["oi"]

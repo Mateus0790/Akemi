@@ -40,7 +40,8 @@ FALLBACK_FAST_MODEL=qwen2.5:7b
 - Se uma resposta falar já começou a sair e o cérebro cai no meio, ela não
   troca (repetiria a frase). Você só precisa pedir de novo.
 - Sem a `NVIDIA_API_KEY`, mas com reserva, ela liga só com o cérebro local:
-  dá para rodar a Akemi **100% offline** (Ollama + Kokoro/Piper + Whisper).
+  dá para rodar a Akemi **100% offline** (Ollama + Kokoro/Piper + Whisper; o Fish Audio
+  é a única voz que precisa de internet).
 - Com `DEEP_PROVIDER` diferente, o modelo profundo tem a mesma lista de reservas.
 
 No Docker do ZimaOS, aponte `OLLAMA_BASE_URL` para o Ollama da sua rede
@@ -53,9 +54,12 @@ No Docker do ZimaOS, aponte `OLLAMA_BASE_URL` para o Ollama da sua rede
   crescente (1 s, 2 s, 4 s... até 60 s). Um bug numa parte não derruba as outras.
 - **Vigia**: a cada 15 s ela confere o barramento de eventos e a fila de fala,
   e religa o que tiver parado.
-- **Voz**: depois de 3 erros seguidos do Piper/Kokoro (placa de som sumiu, por
-  exemplo), ela passa a escrever no terminal. Nenhuma frase se perde: a que
-  falhou sai no terminal. A cada 60 s tenta a voz de novo e volta sozinha.
+- **Voz**: se o Fish Audio (voz principal na nuvem) falhar, por falta de
+  internet ou de créditos, a frase sai na hora na voz local reserva (Kokoro ou
+  Piper, `TTS_FALLBACK`). Depois de 3 erros seguidos do Piper/Kokoro (placa de
+  som sumiu, por exemplo), ela passa a escrever no terminal. Nenhuma frase se
+  perde: a que falhou sai na reserva. A cada 60 s tenta a voz principal de novo
+  e volta sozinha.
 - Ela sabe como está por dentro (entra no prompt só quando algo vai mal) e
   avisa sem drama: "Ih, minha visão deu problema. Tô me
   consertando." e depois "Pronto, voltou." No máximo um aviso de problema por
