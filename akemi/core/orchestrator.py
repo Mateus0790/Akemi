@@ -217,8 +217,12 @@ class Akemi:
             health=self.health,
             initiative=settings.initiative_enabled,
         )
+        # Pedidos claros que ela entende sem o modelo. Lembrete com horário primeiro:
+        # "me lembra amanhã de analisar a pasta X" é lembrete, não análise agora.
+        parsers = [self.reminders.direct_request]
         if self.files is not None:
-            self.mind.direct_request = parse_request
+            parsers.append(parse_request)
+        self.mind.direct_request = lambda text: next((c for p in parsers if (c := p(text)) is not None), None)
         # O jogo aberto vem antes: "5" é jogada, não pedido para o modelo.
         self.mind.shortcuts += [self.call.shortcut, self.arcade.shortcut, self.routines.shortcut]
         if self.clipper is not None:

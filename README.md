@@ -276,7 +276,8 @@ Peça por voz ou pelo terminal:
 | "desliga o PC daqui a uma hora", "reinicia o PC" | desliga ou reinicia na hora marcada | **sim** |
 | "cancela o desligamento" | cancela o que estiver marcado | não |
 | "me lembra em 10 minutos de tirar a pizza" | avisa por voz na hora | não |
-| "me lembra amanhã às 9h de ligar pro dentista" | lembrete com data (fica salvo) | não |
+| "me lembra amanhã às 9h de ligar pro dentista" | lembrete com data (fica salvo), entendido sem o modelo | não |
+| "põe um timer de 5 minutos", "adia 10 minutos", "cancela o lembrete do dentista" | timer, adiar o que acabou de tocar, cancelar um ([docs/CAPRI.md](docs/CAPRI.md#lembretes-com-data)) | não |
 | "me avisa quando aparecer download concluído" | vigia a tela (com `--tela`) | não |
 | "quando eu disser modo jogo, abre o Discord e baixa o volume" | cria uma rotina | **sim**, ao criar |
 | "clipa isso" | salva o replay buffer do OBS (`OBS_ENABLED`) | não |
