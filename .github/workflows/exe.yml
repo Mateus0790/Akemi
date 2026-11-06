@@ -1,0 +1,73 @@
+name: Akemi.exe
+
+# Gera o Akemi.exe para Windows (PyInstaller, packaging/akemi.spec).
+# Baixe em: Actions → "Akemi.exe" → a execução mais recente → Artifacts →
+# Akemi-windows. Numa tag v* o zip também vai para a página de Releases.
+on:
+  push:
+    paths: ["akemi/**", "packaging/**", "pyproject.toml", ".env.example", ".github/workflows/exe.yml"]
+    tags: ["v*"]
+  pull_request:
+    paths: ["akemi/**", "packaging/**", "pyproject.toml", ".env.example", ".github/workflows/exe.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write  # só para anexar o zip na Release das tags
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Tudo o que roda no PC entra no .exe. Os modelos de voz, o Tesseract e
+      # o .env ficam de fora (são seus e vão na pasta ao lado do .exe).
+      - name: Instalar a Akemi com os extras do PC
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[exe,audio,stt,mic,vision,tts,kokoro,voz,arquivos,servidor,obs,windows]"
+
+      - name: Gerar o Akemi.exe
+        run: pyinstaller packaging/akemi.spec --noconfirm
+
+      # Abre o .exe de verdade: cria o .env na primeira vez, conversa no modo
+      # eco e confere os sub-comandos.
+      - name: Testar o .exe
+        shell: pwsh
+        run: |
+          $exe = "dist\Akemi\Akemi.exe"
+          "oi akemi`n/estado`n/sair" | & $exe --echo
+          if ($LASTEXITCODE -ne 0) { throw "o console saiu com $LASTEXITCODE" }
+          if (-not (Test-Path "dist\Akemi\.env")) { throw "não criou o .env" }
+          if (-not (Test-Path "dist\Akemi\data\memory.sqlite3")) { throw "não criou a memória" }
+          & $exe chip --help
+          if ($LASTEXITCODE -ne 0) { throw "akemi-chip falhou" }
+          & $exe corpo --help
+          if ($LASTEXITCODE -ne 0) { throw "akemi-corpo falhou" }
+          '{}' | & $exe -m akemi.casca.hook claude
+          if ($LASTEXITCODE -ne 0) { throw "o hook do Modo Casca falhou" }
+          # O que o teste criou não vai para o zip.
+          Remove-Item -Recurse -Force "dist\Akemi\data", "dist\Akemi\.env"
+
+      - name: Zipar
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE dist\Akemi\
+          Compress-Archive -Path dist\Akemi -DestinationPath Akemi-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Akemi-windows
+          path: Akemi-windows.zip
+          retention-days: 30
+
+      - name: Anexar na Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Akemi-windows.zip
