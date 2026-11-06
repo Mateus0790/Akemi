@@ -411,3 +411,35 @@ def test_persona_knows_iron_man_inspiration():
     p = Persona.load()
     assert "J.A.R.V.I.S." in p.inspiration and "F.R.I.D.A.Y." in p.inspiration
     assert "Capricórnio" in p.inspiration and p.will
+
+
+@pytest.mark.asyncio
+async def test_without_internet_she_thinks_and_speaks_locally(tmp_path):
+    """Nuvem fora (NIM e Fish Audio): responde com o cérebro local, na voz local."""
+    import httpx
+
+    from akemi.tts.fish_engine import FishAudioTTS
+
+    class SilentPlayer:
+        played = 0
+
+        def play(self, *a):
+            SilentPlayer.played += 1
+
+    def offline(request):
+        raise httpx.ConnectError("sem internet", request=request)
+
+    local_voice = RecordingTTS()
+    fish = FishAudioTTS("chave", client=httpx.Client(transport=httpx.MockTransport(offline)), player=SilentPlayer())
+    voice = ResilientTTS(fish, fallback=local_voice)
+    local_brain = EchoProvider(lambda m, j: "{}" if j else "Tô sem internet, mas tô aqui.")
+    brain = FallbackProvider([Brain(Broken(), "nim"), Brain(local_brain, "ollama")])
+    settings = Settings(_env_file=None, brain_provider="echo", data_dir=tmp_path, idle_think_interval_s=0,
+                        self_improve_interval_s=0, min_seconds_between_unprompted_speech=0)
+    akemi = Akemi(settings, fast=brain, deep=brain, tts=voice, persist=False, desktop_actions=False)
+    await akemi.start()
+    akemi.owner_say("oi akemi")
+    await settle(akemi, 0.5)
+    await akemi.stop()
+    assert "Tô sem internet, mas tô aqui." in local_voice.said
+    assert SilentPlayer.played == 0 and brain.active == "ollama"

@@ -17,6 +17,7 @@ Comandos:
     /pensar                   força um momento de pensamento
     /estado                   mostra humor, objetivo, tarefas, gostos e opiniões
     /saude                    como ela está por dentro (cérebro em uso, voz, autocura)
+    /mcp                      os apps conectados por MCP e as ferramentas de cada um
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
     /voz                      reconhecimento da sua voz: cadastro, limites, quem ela ouviu
@@ -149,6 +150,8 @@ async def run(
                 print(akemi.state.describe())
             elif line == "/saude":
                 print(akemi.describe_health())
+            elif line == "/mcp":
+                print(akemi.describe_mcp())
             elif line.startswith("/pr ") or line == "/prs":
                 if akemi.oficina is None:
                     print("  (oficina desligada: veja docs/OFICINA.md)")
