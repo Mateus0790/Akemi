@@ -1,5 +1,6 @@
 """Clipes pelo OBS, contra um obs-websocket 5 falso (com senha de verdade)."""
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -135,6 +136,44 @@ async def test_wrong_password_and_obs_closed():
         await server.wait_closed()
     with pytest.raises(OBSError, match="não achei o OBS"):
         await OBSClient(url, PASSWORD, timeout=2).run(("GetReplayBufferStatus", None))
+
+
+class NeverConnects:
+    """Como o Windows com o OBS fechado: a conexão demora a ser recusada."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        await asyncio.sleep(10)
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+@pytest.mark.asyncio
+async def test_obs_that_never_picks_up_is_not_found():
+    client = OBSClient("ws://127.0.0.1:4455", PASSWORD, timeout=0.1, connect=NeverConnects)
+    with pytest.raises(OBSError, match="não achei o OBS"):
+        await client.run(("GetReplayBufferStatus", None))
+
+
+@pytest.mark.asyncio
+async def test_obs_that_connects_but_goes_quiet_did_not_answer():
+    async def quiet(ws):
+        await ws.recv()  # nem manda o Hello
+        await asyncio.sleep(10)
+
+    from websockets.asyncio.server import serve as ws_serve
+
+    server = await ws_serve(quiet, "127.0.0.1", 0)
+    url = f"ws://127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    try:
+        with pytest.raises(OBSError, match="não respondeu a tempo"):
+            await OBSClient(url, PASSWORD, timeout=0.3).run(("GetReplayBufferStatus", None))
+    finally:
+        server.close()
+        await server.wait_closed()
 
 
 @pytest.mark.asyncio

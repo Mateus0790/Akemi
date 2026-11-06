@@ -53,6 +53,9 @@ def auth_string(password: str, salt: str, challenge: str) -> str:
     return base64.b64encode(hashlib.sha256((secret + challenge).encode()).digest()).decode()
 
 
+NOT_FOUND = "não achei o OBS (ele está aberto, com o servidor WebSocket ligado?)"
+
+
 class OBSClient:
     """Uma conversa curta com o OBS: conecta, identifica, faz pedidos e fecha."""
 
@@ -75,19 +78,25 @@ class OBSClient:
 
     async def run(self, *requests: tuple[str, dict | None]) -> list[dict]:
         """Faz os pedidos em ordem numa conexão só. Devolve o ``responseData`` de cada um."""
+        connected: list[bool] = []
         try:
-            return await asyncio.wait_for(self._run(requests), self.timeout)
+            return await asyncio.wait_for(self._run(requests, connected), self.timeout)
         except asyncio.TimeoutError as exc:
+            if not connected:
+                # No Windows, uma porta fechada demora uns 2 s para recusar: o tempo
+                # acaba antes. Sem conexão, é o OBS fechado, não o OBS lento.
+                raise OBSError(NOT_FOUND) from exc
             raise OBSError("o OBS não respondeu a tempo") from exc
         except OSError as exc:
-            raise OBSError("não achei o OBS (ele está aberto, com o servidor WebSocket ligado?)") from exc
+            raise OBSError(NOT_FOUND) from exc
 
-    async def _run(self, requests) -> list[dict]:
+    async def _run(self, requests, connected: list[bool]) -> list[dict]:
         opener = self._opener()  # sem o pacote websockets, explica o que instalar
         from websockets.exceptions import ConnectionClosed
 
         try:
             async with opener(self.url, max_size=2**20) as ws:
+                connected.append(True)
                 await self._identify(ws)
                 return [await self._request(ws, kind, data) for kind, data in requests]
         except ConnectionClosed as exc:
