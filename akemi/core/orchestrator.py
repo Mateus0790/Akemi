@@ -16,6 +16,7 @@ from akemi.actions.files import FileAnalyst, parse_request, register_file_action
 from akemi.actions.lookout import Lookout, register_lookout_actions
 from akemi.actions.registry import ActionRegistry, Tier
 from akemi.actions.reminders import Reminders, register_reminder_actions
+from akemi.actions.routines import Routines, register_routine_actions
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
@@ -148,6 +149,17 @@ class Akemi:
 
             register_desktop_actions(self.actions)
         self.oficina = self._build_oficina()
+        # Rotinas por último: os passos podem usar qualquer ação registrada acima.
+        self.routines = Routines(self.actions, data / "rotinas.json" if persist else None,
+                                 wake_words=settings.wake_words)
+        register_routine_actions(self.actions, self.routines)
+        from akemi.games import Arcade, register_game_actions
+
+        self.arcade = Arcade(
+            on_board=lambda board: self.bus.publish(Event("jogo.tabuleiro", {"text": board}, source="jogo")),
+            on_result=self._game_result, wake_words=settings.wake_words,
+        )
+        register_game_actions(self.actions, self.arcade)
         self.allow_initiative()
 
         self.persist = persist
@@ -179,6 +191,9 @@ class Akemi:
         )
         if self.files is not None:
             self.mind.direct_request = parse_request
+        # O jogo aberto vem antes: "5" é jogada, não pedido para o modelo.
+        self.mind.shortcuts += [self.arcade.shortcut, self.routines.shortcut]
+        self.mind.context_providers.append(self.arcade.describe_for_prompt)
         engine = tts or build_tts(settings)
         if isinstance(engine, ResilientTTS) and engine.on_health is None:
             engine.on_health = lambda ok, detail: self.health.report("voz", ok, detail, label="voz")
@@ -200,6 +215,10 @@ class Akemi:
         self.casca_listener = None
         self.avatar = None
         self._pat_said_at = -1e9
+
+    def _game_result(self, title: str, winner: str) -> None:
+        what = {"dono": f"{self.settings.owner_name} ganhou", "akemi": "você ganhou", "empate": "empatou"}[winner]
+        self.memory.add_episode("jogo", f"{title} com {self.settings.owner_name}: {what}")
 
     # ------------------------------------------------- modo casca (Capri)
     def _build_casca(self):

@@ -28,6 +28,8 @@ Comandos:
     /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
     /casca                    o que o Claude Code/Codex estão fazendo (Modo Casca)
     /lembretes                os lembretes pendentes
+    /rotinas                  suas rotinas de voz ("quando eu disser X, faz Y")
+    /jogar <jogo>             velha, forca, pedra ou adivinhacao (ou diga "vamos jogar forca")
     /vigias                   o que ela está vigiando na tela
     /sair
 """
@@ -42,6 +44,7 @@ from akemi.core.config import Settings
 from akemi.core.events import Event
 from akemi.core.logging_setup import configure_logging
 from akemi.core.orchestrator import Akemi
+from akemi.games.arcade import which_game
 
 
 async def _ainput(prompt: str) -> str:
@@ -101,6 +104,7 @@ async def run(
     configure_logging(settings.log_level, settings.log_json)
     akemi = Akemi(settings)
     await akemi.start()
+    akemi.bus.subscribe("jogo.tabuleiro", lambda e: print("\n" + e.text + "\n"))
     phone_ws = await start_phone(akemi) if phone else None
     if settings.avatar_enabled and akemi.avatar is None:
         print("  (avatar desligado: precisa do tkinter e de uma tela; veja docs/CAPRI.md)")
@@ -205,6 +209,15 @@ async def run(
             elif line == "/lembretes":
                 items = akemi.reminders.pending
                 print("\n".join(f"  #{r.id} {r.describe()}" for r in items) or "  (nenhum lembrete)")
+            elif line.startswith("/jogar"):
+                name = line[6:].strip() or "velha"
+                try:
+                    akemi.bus.publish(Event("speech.say", {"text": akemi.arcade.start(
+                        which_game(name) or name)}, source="jogo"))
+                except ValueError as exc:
+                    print(f"  ({exc})")
+            elif line == "/rotinas":
+                print("  " + akemi.routines.describe())
             elif line == "/vigias":
                 print("  " + akemi.lookout.describe())
             elif line == "/pausar":

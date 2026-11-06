@@ -71,6 +71,14 @@ MOOD_INSTRUCTION = (
 
 
 @dataclass
+class ShortcutReply:
+    """Resposta de um atalho. ``remember=False`` não guarda na memória (ex.: cada jogada de um jogo)."""
+
+    text: str
+    remember: bool = True
+
+
+@dataclass
 class Models:
     fast: LLMProvider
     fast_model: str
@@ -157,6 +165,9 @@ class Mind:
         self.history: deque[Message] = deque(maxlen=20)
         # Reconhece pedidos claros sem gastar o modelo (ex.: análise de arquivos).
         self.direct_request: Callable[[str], ActionCall | None] | None = None
+        # Atalhos que respondem ao dono antes do modelo (rotina, jogada de um jogo aberto).
+        # Recebem o texto e o evento e devolvem a resposta, "" (fez sem falar) ou None (não é comigo).
+        self.shortcuts: list[Callable[[str, Event], Awaitable[str | ShortcutReply | None]]] = []
         self.live_history: deque[Message] = deque(maxlen=10)
         self.guest_history: deque[Message] = deque(maxlen=6)
         self.ambient: deque[tuple[float, str, str]] = deque(maxlen=15)
@@ -344,6 +355,24 @@ class Mind:
                             "error": f"Tentei, mas deu erro: {result.detail}",
                         }.get(result.status, result.detail)
                         self.say(msg, event)
+                    return
+
+            for shortcut in list(self.shortcuts):
+                try:
+                    reply = await shortcut(text, event)
+                except Exception:
+                    logger.exception("shortcut failed")
+                    reply = None
+                if reply is not None:
+                    if isinstance(reply, str):
+                        reply = ShortcutReply(reply)
+                    if reply.text:
+                        self.say(reply.text, event)
+                    self.history.append(Message("user", text))
+                    self.history.append(Message("assistant", reply.text or "(feito)"))
+                    if reply.remember:
+                        self.memory.add_episode("conversa", f"{self.owner}: {text}\nAkemi: {reply.text}")
+                    self._save_state()
                     return
 
             direct = self.direct_request(text) if self.direct_request else None
