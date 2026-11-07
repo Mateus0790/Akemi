@@ -32,6 +32,9 @@ Comandos:
     /jogar <jogo>             velha, forca, pedra ou adivinhacao (ou diga "vamos jogar forca")
     /chamada                  entra ou sai da call de voz (ou diga "Akemi, entra na call")
     /vigias                   o que ela está vigiando na tela
+    /habilidades              os programas em que ela sabe (ou está aprendendo a) participar
+    /habilidade ver|ativar|desativar|apagar <id>   revisa e liga uma habilidade (docs/HABILIDADES.md)
+    /criar <programa>         ela cria agora, em segundo plano, uma habilidade para o programa
     /sair
 """
 
@@ -222,6 +225,30 @@ async def run(
                 akemi.bus.publish(Event("speech.say", {"text": said}, source="chamada"))
             elif line == "/rotinas":
                 print("  " + akemi.routines.describe())
+            elif line == "/habilidades" or line.startswith(("/habilidade ", "/criar ")):
+                if akemi.skills is None:
+                    print("  (habilidades desligadas: HABILIDADES_ENABLED=true)")
+                elif line == "/habilidades":
+                    print(akemi.skills.describe())
+                elif line.startswith("/criar "):
+                    try:
+                        print("  " + akemi.skills.start_build(line[7:].strip()))
+                    except ValueError as exc:
+                        print(f"  (não deu: {exc})")
+                else:
+                    _, cmd, pid = (line.split(maxsplit=2) + ["", ""])[:3]
+                    if cmd not in ("ver", "ativar", "desativar", "apagar") or not pid:
+                        print("  uso: /habilidade ver|ativar|desativar|apagar <id>")
+                        continue
+                    try:
+                        if cmd == "ver":
+                            print(akemi.skills.show(pid))
+                        else:
+                            fn = {"ativar": akemi.skills.activate, "desativar": akemi.skills.deactivate,
+                                  "apagar": akemi.skills.remove}[cmd]
+                            print("  " + await fn(pid))
+                    except Exception as exc:
+                        print(f"  (não deu: {exc})")
             elif line == "/vigias":
                 print("  " + akemi.lookout.describe())
             elif line == "/pausar":

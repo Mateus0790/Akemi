@@ -118,6 +118,14 @@ class Settings(BaseSettings):
     oficina_llm_timeout_s: float = 300.0  # escrever código demora mais que conversar
     oficina_test_timeout_s: float = 900.0
 
+    # --- Habilidades: ela percebe o programa aberto e cria um jeito de participar (docs/HABILIDADES.md) ---
+    habilidades_enabled: bool = True
+    habilidades_perguntar: bool = True  # pergunta sozinha quando abre um jogo/programa conhecido
+    habilidades_por_dia: int = 2  # criações em 24 horas
+    habilidades_intervalo_s: float = 20.0  # de quanto em quanto tempo olha os programas abertos
+    habilidades_bloqueados: list[str] = []  # programas extras onde ela nunca entra, ex. ["chrome"]
+    habilidades_model: str = ""  # vazio = OFICINA_MODEL, senão DEEP_MODEL
+
     # --- Rede ---
     control_api_host: str = "127.0.0.1"
     control_api_port: int = 8765

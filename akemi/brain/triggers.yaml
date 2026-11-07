@@ -22,6 +22,12 @@
   cooldown_s: 120
   hint: "O dono parece ter perdido no jogo. Uma provocação leve ou consolo cabe aqui."
 
+- id: dentro_do_programa
+  when: ambient.habilidade.*
+  keywords: []
+  cooldown_s: 90
+  hint: "Isso aconteceu dentro do jogo ou programa que o dono está usando, e você viu pela sua habilidade. Comente se for marcante (morreu, ganhou, conquistou algo, alguém falou com você); senão fique quieta."
+
 - id: menciona_akemi_no_audio
   when: ambient.audio
   keywords: [akemi]

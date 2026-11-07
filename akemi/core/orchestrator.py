@@ -212,6 +212,7 @@ class Akemi:
 
             register_desktop_actions(self.actions)
         self.oficina = self._build_oficina()
+        self.skills = self._build_skills() if persist else None
         # Rotinas por último: os passos podem usar qualquer ação registrada acima.
         self.routines = Routines(self.actions, data / "rotinas.json" if persist else None,
                                  wake_words=settings.wake_words)
@@ -272,6 +273,9 @@ class Akemi:
         if self.clipper is not None:
             self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
         self.mind.context_providers += [self.arcade.describe_for_prompt, self.call.describe_for_prompt]
+        if self.skills is not None:
+            self.mind.shortcuts.append(self.skills.shortcut)
+            self.mind.context_providers.append(self.skills.describe_for_prompt)
         self.mind.ambient_filters.append(self.call.swallow_ambient)
         self.mind.owner_filters.append(self.call.mic_echo)
         self.call.on_change.append(self._call_audio)
@@ -508,6 +512,53 @@ class Akemi:
                                source="oficina", trust=Trust.SYSTEM, priority=Priority.NORMAL))
         return result
 
+    # ---------------------------------------------------------- habilidades
+    def _build_skills(self):
+        """Habilidades por programa (docs/HABILIDADES.md). None se desligadas."""
+        s = self.settings
+        if not s.habilidades_enabled:
+            return None
+        from akemi.brain.providers import build_provider
+        from akemi.habilidades import Builder, Habilidades, register_skill_actions
+
+        root = s.data_dir / "habilidades"
+        builder = None
+        try:
+            llm = build_provider(
+                s.effective_deep_provider, s.model_copy(update={"llm_timeout_s": s.oficina_llm_timeout_s})
+            )
+            builder = Builder(llm, s.habilidades_model or s.oficina_model or s.deep_model, root)
+        except Exception as exc:
+            logger.warning("skill builder off", error=str(exc))
+        skills = Habilidades(
+            root, self.actions, say=self._skill_say, observe=self._skill_observe, builder=builder,
+            ask=self._ask_skill, blocked_extra=list(s.habilidades_bloqueados), per_day=s.habilidades_por_dia,
+            ask_unprompted=s.habilidades_perguntar,
+        )
+        register_skill_actions(self.actions, skills)
+        return skills
+
+    def _skill_say(self, text: str) -> None:
+        self.bus.publish(Event("speech.say", {"text": text, "origin": "habilidades"},
+                               source="habilidades", trust=Trust.SYSTEM, priority=Priority.NORMAL))
+
+    def _skill_observe(self, kind: str, text: str) -> None:
+        # O que vem de dentro de um programa (chat de jogo, log) é de terceiros: PUBLIC.
+        self.observe(f"habilidade.{kind}", text)
+
+    def _ask_skill(self, call, question: str) -> bool:
+        """Pergunta sozinha se pode criar uma habilidade. Não interrompe nada."""
+        if self.pause.paused or self.actions.pending is not None:
+            return False
+        if not self.mind.attention.can_speak_unprompted(self.state):
+            return False
+        result = self.actions.propose(call, {"criar_habilidade"})
+        if result.status != "pending_confirmation":
+            return False
+        # SYSTEM: abre a janela para o dono responder "sim"; só o "sim" dele executa.
+        self.mind.say(question, Event("habilidade.pergunta", source="habilidades", trust=Trust.SYSTEM))
+        return True
+
     # ------------------------------------------------------------ autocura
     def allow_initiative(self) -> None:
         """(Re)aplica a lista de iniciativa: chamar de novo depois de registrar ações."""
@@ -650,6 +701,15 @@ class Akemi:
             logger.info("reminders restored", count=late_or_back)
         if self.casca is not None:
             await self._start_casca()
+        if self.skills is not None:
+            if loaded := self.skills.load_active():
+                logger.info("skills loaded", skills=loaded)
+            if self.local_body and self.desktop_actions:
+                from akemi.habilidades import ActivityWatcher
+
+                watcher = ActivityWatcher(self.skills.on_open, self.skills.on_close,
+                                          interval_s=self.settings.habilidades_intervalo_s)
+                self._tasks.append(self._supervised("habilidades", watcher.run, "vigia dos programas abertos"))
         if self.settings.avatar_enabled:
             if why := self.start_avatar():
                 logger.warning("avatar off", reason=why)
@@ -712,6 +772,8 @@ class Akemi:
 
     async def stop(self) -> None:
         await self.senses.stop()
+        if self.skills is not None:
+            await self.skills.stop()
         if self.casca_listener is not None:
             await self.casca_listener.stop()
         if self.avatar is not None:

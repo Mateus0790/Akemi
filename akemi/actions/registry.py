@@ -133,6 +133,13 @@ class ActionRegistry:
     def add(self, action: Action) -> None:
         self._actions[action.name] = action
 
+    def unregister(self, name: str) -> None:
+        """Tira uma ação (ex.: habilidade desativada). Sai também da iniciativa."""
+        self._actions.pop(name, None)
+        self.initiative.discard(name)
+        if self._pending is not None and self._pending.call.name == name:
+            self._pending = None
+
     def get(self, name: str) -> Action | None:
         return self._actions.get(name)
 

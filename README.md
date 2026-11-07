@@ -53,6 +53,10 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   pessoa no microfone conversa com ela, mas não manda nela
 - **Oficina** ([docs/OFICINA.md](docs/OFICINA.md)): ela muda o próprio código e abre um
   PR para você revisar ("abre um PR para ...", `/pr`)
+- **Habilidades** ([docs/HABILIDADES.md](docs/HABILIDADES.md)): ela percebe o jogo ou
+  programa que você abriu ("vou jogar Stardew") e, se você deixar, cria em segundo plano
+  um jeito de participar dele. Na próxima vez que você abrir, ela já está lá. Pergunta antes,
+  nunca mexe em jogo com anti-cheat e nada liga sem a sua revisão
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
 
@@ -110,6 +114,8 @@ Comandos no console:
 | `/saude` | como ela está por dentro: cérebro em uso, voz, autocura |
 | `/pr <pedido>`, `/prs` | ela abre um PR no próprio código; lista os PRs dela |
 | `/voz` | reconhecimento da sua voz: cadastro e quem ela ouviu |
+| `/habilidades`, `/habilidade ver\|ativar <id>` | os programas em que ela participa; revisar e ligar ([docs/HABILIDADES.md](docs/HABILIDADES.md)) |
+| `/criar <programa>` | ela cria uma habilidade para o programa em segundo plano |
 | `analisa a pasta X` | ela lê em segundo plano e conta depois ([docs/ARQUIVOS.md](docs/ARQUIVOS.md)) |
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |

@@ -358,8 +358,12 @@ class Mind:
                 if yn is not None:
                     result = await self.actions.resolve_confirmation(yn, event.trust)
                     if result:
+                        confirmed = self.actions.get(result.name)
+                        done = "Feito."
+                        if confirmed and confirmed.speak_result and isinstance(result.value, str) and result.value:
+                            done = result.value  # ex.: "vou montar isso em segundo plano..."
                         msg = {
-                            "executed": "Feito.",
+                            "executed": done,
                             "denied": "Beleza, cancelei.",
                             "error": f"Tentei, mas deu erro: {result.detail}",
                         }.get(result.status, result.detail)
