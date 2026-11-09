@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 URL_RE = re.compile(r"(https?://\S+|www\.\S+|\b\S+\.(com|net|org|gg|tv|io|br|xyz)(/\S*)?)", re.I)
@@ -115,3 +116,58 @@ class Moderator:
             clean = cut[: end + 1] if end > self.max_chars // 2 else cut
             reasons.append("truncated")
         return Verdict(bool(clean), clean, reasons)
+
+    # ------------------------------------------------------- resposta em chat
+    def check_chat_reply(self, text: str, allowed: Iterable[str] = ()) -> Verdict:
+        """Texto que ela escreve para um contato (secretária nos chats).
+
+        Chaves de API e CPF nunca saem. Links e e-mails só saem se estiverem em
+        ``allowed`` (o que o dono deixou ela contar). Não é voz, então o
+        markdown fica (o WhatsApp usa *negrito*).
+        """
+        kept = {_bare(a) for a in allowed if a.strip()}
+        reasons: list[str] = []
+        clean = ACTION_TAG_RE.sub("", text)
+
+        def scrub(rx: re.Pattern, label: str, repl: str, keep: bool) -> str:
+            hit = False
+
+            def sub(m: re.Match) -> str:
+                nonlocal hit
+                if keep and _bare(m.group(0)) in kept:
+                    return m.group(0)
+                hit = True
+                return repl
+
+            out = rx.sub(sub, clean)
+            if hit:
+                reasons.append(label)
+            return out
+
+        clean = scrub(SECRET_RE, "secret", "", keep=False)
+        clean = scrub(CPF_RE, "cpf", "", keep=False)
+        clean = scrub(EMAIL_RE, "email", "(e-mail)", keep=True)
+        clean = scrub(URL_RE, "url", "(link)", keep=True)
+        clean = re.sub(r"[ \t]+", " ", clean).strip()
+        if hit := self._blocked(clean):
+            return Verdict(False, "", reasons + [f"blocklist:{hit}"])
+        if len(clean) > self.max_chars:
+            cut = clean[: self.max_chars]
+            end = max(cut.rfind("."), cut.rfind("!"), cut.rfind("?"))
+            clean = cut[: end + 1] if end > self.max_chars // 2 else cut
+            reasons.append("truncated")
+        return Verdict(bool(clean), clean, reasons)
+
+
+def _bare(token: str) -> str:
+    """Link ou e-mail sem a pontuação do fim da frase, para comparar."""
+    return token.strip().rstrip(".,;:!?)").lower()
+
+
+def allowed_tokens(texts: Iterable[str]) -> list[str]:
+    """Links e e-mails que aparecem no que o dono deixou contar."""
+    found: list[str] = []
+    for t in texts:
+        found += [m.group(0) for m in EMAIL_RE.finditer(t)]
+        found += [m.group(0) for m in URL_RE.finditer(t)]
+    return found

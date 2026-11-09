@@ -51,6 +51,7 @@ VTuber de IA.
 | `actions/obs.py` | Clipes: obs-websocket 5 → `SaveReplayBuffer`. |
 | `games/` | Minijogos por voz. Com o jogo aberto, as jogadas são atalhos da mente (sem modelo). |
 | `chamada.py` | Modo chamada: `ambient.audio` com "Akemi" → `call.message` (`Trust.PUBLIC`); pedido de amigo vira `propose` (só o "sim" do dono executa); `tts/mirror.py` põe a voz no cabo virtual. |
+| `secretaria/` | Secretária nos chats: mensagens para o dono (`Trust.PUBLIC`, ponte HTTP `POST /mensagem` ou Telegram) → resposta curta sem memória nem estado do dono, só o que ele liberou (`pode_contar`); recados em `data/recados.json`, contados quando ele volta ([SECRETARIA.md](SECRETARIA.md)). |
 
 ## Dois modelos
 

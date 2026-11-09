@@ -188,6 +188,18 @@ class Settings(BaseSettings):
     call_friends_can_ask: bool = False  # amigos pedem ações e você confirma
     call_friend_actions: list[str] = ["abrir_programa", "abrir_site", "pesquisar", "midia", "volume"]
 
+    # --- Secretária nos chats: ela responde quem te manda mensagem (docs/SECRETARIA.md) ---
+    secretaria_enabled: bool = False
+    # ocupado = só enquanto você está ocupado ("tô em reunião"); sempre = responde toda mensagem
+    secretaria_quando: Literal["ocupado", "sempre"] = "ocupado"
+    secretaria_token: str = ""  # senha da ponte HTTP (vazio = AKEMI_TOKEN); mínimo 16 caracteres
+    secretaria_host: str = "127.0.0.1"  # 0.0.0.0 para o celular alcançar pela rede de casa
+    secretaria_port: int = 8766
+    secretaria_grupos: bool = False  # responder em grupos
+    secretaria_ignorar: list[str] = []  # nomes ou números que ela nunca responde
+    secretaria_max_por_contato: int = 4  # respostas por pessoa a cada 10 minutos
+    telegram_bot_token: str = ""  # do @BotFather: ela responde no Telegram (docs/SECRETARIA.md)
+
     # --- Avatar de desktop (docs/CAPRI.md): desativado por enquanto ---
     avatar_enabled: bool = False  # experimental: só liga com AVATAR_ENABLED=true
     avatar_scale: float = 1.0  # 0.5 a 3

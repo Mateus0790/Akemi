@@ -35,6 +35,8 @@ Comandos:
     /jogar <jogo>             velha, forca, pedra ou adivinhacao (ou diga "vamos jogar forca")
     /chamada                  entra ou sai da call de voz (ou diga "Akemi, entra na call")
     /vigias                   o que ela está vigiando na tela
+    /recados                  secretária nos chats: se você está ocupado, o que ela pode contar e os recados
+    /dm <contato> <mensagem>  simula alguém te mandando mensagem (SECRETARIA_ENABLED)
     /sair
 """
 
@@ -114,6 +116,9 @@ async def run(
         print("  (avatar desligado: precisa do tkinter e de uma tela; veja docs/CAPRI.md)")
     if akemi.casca_listener is not None:
         print(f"  🤖 Modo Casca: acompanhando {', '.join(sorted(akemi.casca.sources))}")
+    if akemi.secretaria is not None:
+        where = ", ".join(akemi.secretaria.canais) or "nenhum chat ligado (veja docs/SECRETARIA.md)"
+        print(f"  💬 Secretária nos chats: {where}. Diga \"tô ocupado\" e ela responde por você.")
     print("Akemi no console. Digite /sair para encerrar, /ajuda para comandos.\n")
     try:
         while True:
@@ -234,6 +239,21 @@ async def run(
                 print("  " + akemi.routines.describe())
             elif line == "/vigias":
                 print("  " + akemi.lookout.describe())
+            elif line == "/recados" or line.startswith("/dm"):
+                sec = akemi.secretaria
+                if sec is None:
+                    print("  (secretária desligada: SECRETARIA_ENABLED=true no .env; veja docs/SECRETARIA.md)")
+                elif line == "/recados":
+                    print(sec.describe())
+                else:
+                    parts = line.split(maxsplit=2)
+                    if len(parts) < 3:
+                        print("uso: /dm <contato> <mensagem>")
+                        continue
+                    from akemi.secretaria import Mensagem
+
+                    reply = await sec.receive(Mensagem(parts[1], parts[2], "console"))
+                    print(f"  💬 para {parts[1]}: {reply}" if reply else f"  (ela ficou quieta: {sec.last_skip})")
             elif line == "/pausar":
                 akemi.pause.pause("console")
                 print("  (pausada: só responde a você)")
