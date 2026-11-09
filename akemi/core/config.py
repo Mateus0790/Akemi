@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     self_improve_interval_s: float = 21600.0  # revisão automática (0 = só com /evoluir)
     self_improve_autonomous: bool = True  # muda sozinha (False = espera /aprovar)
     self_improve_min_conversations: int = 6  # conversas novas para valer a revisão
+    # Memória: ela resume os dias antigos (como quem dorme) para o banco não crescer sem fim.
+    memory_consolidate_interval_s: float = 21600.0  # 0 = só com /resumir
+    memory_keep_days: float = 7.0  # episódios mais novos que isso ficam inteiros
 
     # --- Comportamento autônomo ---
     idle_think_interval_s: float = 180.0
