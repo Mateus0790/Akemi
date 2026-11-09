@@ -147,6 +147,22 @@ async def test_tests_run_without_your_keys(repos, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_tests_run_without_git_config_from_the_environment(repos, tmp_path, monkeypatch):
+    """Config do git pelo ambiente sai inteira: pela metade, todo git dos testes quebra."""
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.https://github.com/.extraheader")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic segredo")
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'http.extraheader'='segredo'")
+    check = [sys.executable, "-c",
+             "import os, subprocess, sys, tempfile; "
+             "sys.exit(1 if [k for k in os.environ if k.startswith('GIT_CONFIG_')] else "
+             "subprocess.run(['git', 'init', '-q', tempfile.mkdtemp()]).returncode)"]
+    oficina, gh, _, _, _ = make(repos, tmp_path, [plan(2)], test_cmd=check)
+    result = await oficina.propose("faz f devolver 2")
+    assert result.status == "aberto", result.detail
+
+
+@pytest.mark.asyncio
 async def test_daily_limit(repos, tmp_path):
     oficina, gh, _, _, _ = make(repos, tmp_path, [plan(2)], per_day=1)
     assert (await oficina.propose("faz f devolver 2")).status == "aberto"
