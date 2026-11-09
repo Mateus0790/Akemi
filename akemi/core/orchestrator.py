@@ -243,6 +243,8 @@ class Akemi:
             can_hear=lambda: self.settings.system_audio_enabled or "audio_pc" in self.state.senses,
         )
         register_call_actions(self.actions, self.call)
+        self.secretaria = self._build_secretaria(persist)
+        self.chat_bridges: list = []  # ponte HTTP e Telegram, quando ligados
         self.allow_initiative()
 
         self.persist = persist
@@ -283,6 +285,9 @@ class Akemi:
         if self.clipper is not None:
             self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
         self.mind.context_providers += [self.arcade.describe_for_prompt, self.call.describe_for_prompt]
+        if self.secretaria is not None:
+            self.mind.shortcuts.append(self.secretaria.shortcut)  # "tô em reunião até as 15h"
+            self.mind.context_providers.append(self.secretaria.describe_for_prompt)
         # A vida existe sempre (o que ela anotou não some); o painel liga e desliga.
         self.vida = Vida(data / "vida.json" if persist else None, owner=settings.owner_name,
                          absence_hours=settings.vida_absence_hours)
@@ -335,6 +340,78 @@ class Akemi:
             mirror.mirror = on
         if not on:
             self.mind.call_history.clear()
+
+    # ------------------------------------------------ secretária nos chats
+    def _build_secretaria(self, persist: bool):
+        """Ela responde quem te manda mensagem enquanto você está ocupado (docs/SECRETARIA.md)."""
+        s = self.settings
+        if not s.secretaria_enabled:
+            return None
+        from akemi.secretaria import Secretaria, register_secretaria_actions
+
+        sec = Secretaria(
+            owner=s.owner_name, llm=self.models.fast, model=self.models.fast_model,
+            persona=lambda: self.mind.persona, moderator=self.moderator, notify=self._secretaria_news,
+            path=s.data_dir / "recados.json" if persist else None, paused=lambda: self.pause.paused,
+            quando=s.secretaria_quando, grupos=s.secretaria_grupos, ignorar=s.secretaria_ignorar,
+            max_por_contato=s.secretaria_max_por_contato,
+        )
+        register_secretaria_actions(self.actions, sec)
+        return sec
+
+    def _secretaria_news(self, text: str, urgent: bool) -> None:
+        self.bus.publish(Event("speech.say", {"text": text, "origin": "secretaria"}, source="secretaria",
+                               trust=Trust.SYSTEM, priority=Priority.HIGH if urgent else Priority.NORMAL))
+
+    async def _secretaria_ticker(self) -> None:
+        while True:
+            await asyncio.sleep(30.0)
+            self.secretaria.check_expiry()  # "até as 15h" passou: volta ao normal e conta os recados
+
+    async def _start_chat_bridges(self) -> None:
+        from akemi.secretaria.ponte import MIN_TOKEN_LEN, PonteChats
+
+        s, sec = self.settings, self.secretaria
+        self._tasks.append(self._supervised("secretaria", self._secretaria_ticker, "secretária"))
+        token = s.secretaria_token or s.akemi_token
+        if len(token) < MIN_TOKEN_LEN:
+            logger.warning("chat bridge off: SECRETARIA_TOKEN (or AKEMI_TOKEN) needs 16+ characters")
+        else:
+            bridge = PonteChats(sec, token, s.secretaria_host, s.secretaria_port)
+            try:
+                await bridge.start()
+                self.chat_bridges.append(bridge)
+                sec.canais.append(f"ponte http://{s.secretaria_host}:{bridge.port}/mensagem")
+            except OSError as exc:
+                self.health.report("ponte_chats", False, f"não abriu a porta {s.secretaria_port}: {exc}",
+                                   label="ponte dos chats")
+        if s.telegram_bot_token.strip():
+            from akemi.secretaria.telegram import TelegramChats
+
+            telegram = TelegramChats(sec, s.telegram_bot_token)
+            self.chat_bridges.append(telegram)
+            sec.canais.append("telegram")
+            self._tasks.append(self._supervised("telegram", telegram.run, "conexão com o Telegram"))
+        if s.discord_bot_token.strip():
+            from akemi.secretaria.discord import DiscordChats
+
+            discord = DiscordChats(sec, s.discord_bot_token, s.discord_dono_id, presence=s.discord_presenca)
+            self.chat_bridges.append(discord)
+            sec.canais.append("discord")
+            self._tasks.append(self._supervised("discord", discord.run, "conexão com o Discord"))
+        if s.teams_client_id.strip():
+            from akemi.secretaria.teams import TOKEN_FILE, TeamsAuth, TeamsChats
+
+            auth = TeamsAuth(s.teams_client_id, s.teams_tenant, s.data_dir / TOKEN_FILE)
+            if not auth.has_login():
+                logger.warning("teams off: run akemi --teams-login once")
+                await auth.aclose()
+            else:
+                teams = TeamsChats(sec, auth, interval_s=s.teams_intervalo_s, presence=s.teams_presenca,
+                                   groups=s.secretaria_grupos)
+                self.chat_bridges.append(teams)
+                sec.canais.append("teams")
+                self._tasks.append(self._supervised("teams", teams.run, "conexão com o Teams"))
 
     def _game_result(self, title: str, winner: str) -> None:
         what = {"dono": f"{self.settings.owner_name} ganhou", "akemi": "você ganhou", "empate": "empatou"}[winner]
@@ -856,6 +933,8 @@ class Akemi:
             logger.info("reminders restored", count=late_or_back)
         if self.casca is not None:
             await self._start_casca()
+        if self.secretaria is not None:
+            await self._start_chat_bridges()
         if self.settings.avatar_enabled:
             if why := self.start_avatar():
                 logger.warning("avatar off", reason=why)
@@ -933,6 +1012,8 @@ class Akemi:
         for t in self._tasks:
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        for bridge in self.chat_bridges:
+            await bridge.stop()
         if self.mcp is not None:
             await self.mcp.close()
         if self.state_path:

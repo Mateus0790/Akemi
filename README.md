@@ -62,6 +62,10 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   PR para você revisar ("abre um PR para ...", `/pr`)
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
+- **Secretária nos chats** ([docs/SECRETARIA.md](docs/SECRETARIA.md)): "tô em reunião até as 15h"
+  e ela responde quem te manda mensagem no WhatsApp, Telegram, Discord e Teams dizendo que você está ocupado,
+  conta só o que você deixou ("pode dizer que eu chego às 19h"), anota os recados e te avisa
+  na hora se for urgente. No Teams ela percebe sozinha quando você está em reunião
 
 - **Ideias do [Capri](https://github.com/lachydotmcg/capri-desktop)** ([docs/CAPRI.md](docs/CAPRI.md)):
   - **Modo Casca** (`akemi --casca claude`): ela vira o corpo do Claude Code e do Codex
@@ -133,6 +137,7 @@ Comandos no console:
 | `/rotinas` | suas rotinas de voz |
 | `/jogar <jogo>` | velha, forca, pedra ou adivinhacao (ou diga "vamos jogar forca") |
 | `/chamada` | entra ou sai da call de voz ([docs/CAPRI.md](docs/CAPRI.md#modo-chamada)) |
+| `/recados`, `/dm <contato> <msg>` | secretária nos chats: status e recados; simula alguém te mandando mensagem ([docs/SECRETARIA.md](docs/SECRETARIA.md)) |
 
 ## Voz
 
@@ -353,6 +358,8 @@ Peça por voz ou pelo terminal:
 | "clipa isso" | salva o replay buffer do OBS (`OBS_ENABLED`) | não |
 | "Akemi, entra na call" | modo chamada ([docs/CAPRI.md](docs/CAPRI.md#modo-chamada)) | não |
 | "lembra que eu gosto de café sem açúcar" | guarda na memória | não |
+| "tô em reunião até as 15h", "voltei" | responde suas mensagens dizendo que você está ocupado, e conta os recados ([docs/SECRETARIA.md](docs/SECRETARIA.md)) | não |
+| "se perguntarem, pode dizer que eu chego às 19h" | ela passa a responder isso nos chats | não |
 
 Toda ação exige que o pedido venha de você (microfone ou terminal). O chat da
 live, a tela, o áudio do PC e os pensamentos dela nunca disparam ação, nem as

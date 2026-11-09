@@ -78,6 +78,9 @@ FEATURES: tuple[Feature, ...] = (
     Feature("oficina_enabled", "Oficina",
             "Muda o próprio código e abre um PR para você revisar.", live=False),
     Feature("obs_enabled", "Clipes no OBS", "Salva clipes quando você pede (\"clipa isso\").", live=False),
+    Feature("secretaria_enabled", "Secretária nos chats",
+            "Responde quem te manda mensagem (WhatsApp, Telegram, Discord, Teams) quando você está "
+            "ocupado e anota os recados.", live=False),
 )
 
 VALUES: tuple[Value, ...] = (

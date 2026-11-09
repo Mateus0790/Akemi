@@ -1,0 +1,18 @@
+{
+  "name": "akemi-whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Liga o seu WhatsApp à secretária da Akemi (docs/SECRETARIA.md)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
+  }
+}

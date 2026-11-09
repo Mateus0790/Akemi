@@ -192,6 +192,27 @@ class Settings(BaseSettings):
     call_friends_can_ask: bool = False  # amigos pedem ações e você confirma
     call_friend_actions: list[str] = ["abrir_programa", "abrir_site", "pesquisar", "midia", "volume"]
 
+    # --- Secretária nos chats: ela responde quem te manda mensagem (docs/SECRETARIA.md) ---
+    secretaria_enabled: bool = False
+    # ocupado = só enquanto você está ocupado ("tô em reunião"); sempre = responde toda mensagem
+    secretaria_quando: Literal["ocupado", "sempre"] = "ocupado"
+    secretaria_token: str = ""  # senha da ponte HTTP (vazio = AKEMI_TOKEN); mínimo 16 caracteres
+    secretaria_host: str = "127.0.0.1"  # 0.0.0.0 para o celular alcançar pela rede de casa
+    secretaria_port: int = 8767  # a 8766 é do painel
+    secretaria_grupos: bool = False  # responder em grupos
+    secretaria_ignorar: list[str] = []  # nomes ou números que ela nunca responde
+    secretaria_max_por_contato: int = 4  # respostas por pessoa a cada 10 minutos
+    telegram_bot_token: str = ""  # do @BotFather: ela responde no Telegram (docs/SECRETARIA.md)
+    # Discord: bot oficial. Responde quando te marcam num servidor e na DM do bot.
+    discord_bot_token: str = ""
+    discord_dono_id: str = ""  # seu ID no Discord (Modo desenvolvedor → clique no seu nome → Copiar ID)
+    discord_presenca: bool = False  # "Não perturbe" no Discord liga o modo ocupado (precisa do intent PRESENCE)
+    # Teams: conta de trabalho/escola, pela API oficial (Microsoft Graph). Login: akemi --teams-login
+    teams_client_id: str = ""  # registro de app no Entra ID (sem segredo, "public client")
+    teams_tenant: str = "organizations"  # ou o ID/domínio da sua empresa
+    teams_presenca: bool = True  # em reunião/ligação no Teams = modo ocupado, sozinho
+    teams_intervalo_s: float = 15.0  # de quanto em quanto tempo ela olha as conversas
+
     # --- Avatar de desktop (docs/CAPRI.md): desativado por enquanto ---
     avatar_enabled: bool = False  # experimental: só liga com AVATAR_ENABLED=true
     avatar_scale: float = 1.0  # 0.5 a 3
