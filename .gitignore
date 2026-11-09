@@ -133,3 +133,5 @@ Thumbs.db
 
 # Receita do Akemi.exe (a regra *.spec acima esconderia)
 !packaging/akemi.spec
+# Assinatura gerada no build oficial (CI)
+akemi/_assinatura.json

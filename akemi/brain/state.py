@@ -19,7 +19,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-MOODS = ("neutra", "animada", "curiosa", "focada", "entediada", "irritadinha", "sonolenta", "orgulhosa")
+MOODS = ("neutra", "animada", "curiosa", "focada", "entediada", "irritadinha", "sonolenta", "orgulhosa", "triste")
 MAX_THOUGHT_CHARS = 240
 MAX_WILL_CHARS = 160
 MAX_INTERESTS = 8
@@ -79,6 +79,8 @@ class InnerState:
     opinions: list[str] = field(default_factory=list)
     desire: str = ""  # o que ela está com vontade de fazer ou conversar agora
     goal_is_hers: bool = False  # o objetivo atual foi ela que escolheu
+    # Funções que ela sabe que tem (ligada/desligada): percebe quando desligam uma.
+    features: dict[str, bool] = field(default_factory=dict)
 
     # ------------------------------------------------------------------ humor
     def set_mood(self, mood: str, intensity: float = 0.6) -> None:

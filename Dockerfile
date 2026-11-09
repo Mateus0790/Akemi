@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DATA_DIR=/app/data \
+    PAINEL_HOST=0.0.0.0 \
     TZ=America/Sao_Paulo
 
 WORKDIR /app
@@ -16,7 +17,7 @@ COPY akemi ./akemi
 RUN pip install ".[servidor]"
 
 VOLUME ["/app/data"]
-EXPOSE 8765
+EXPOSE 8765 8766
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/saude', timeout=4)"
