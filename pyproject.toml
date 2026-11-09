@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "pyyaml>=6.0.2",
     "httpx>=0.27",
+    "cryptography>=42",  # confere a assinatura da Akemi oficial (akemi-assinatura)
 ]
 
 [project.optional-dependencies]
@@ -109,12 +110,13 @@ akemi = "akemi.console:main"
 akemi-servidor = "akemi.net.server:main"
 akemi-corpo = "akemi.net.body:main"
 akemi-chip = "akemi.storage.chip:main"
+akemi-assinatura = "akemi.assinatura:main"
 
 [tool.setuptools.packages.find]
 include = ["akemi*"]
 
 [tool.setuptools.package-data]
-akemi = ["brain/*.yaml"]
+akemi = ["brain/*.yaml", "_assinatura.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

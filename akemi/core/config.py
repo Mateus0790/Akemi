@@ -60,8 +60,12 @@ class Settings(BaseSettings):
     self_improve_autonomous: bool = True  # muda sozinha (False = espera /aprovar)
     self_improve_min_conversations: int = 6  # conversas novas para valer a revisão
     # Memória: ela resume os dias antigos (como quem dorme) para o banco não crescer sem fim.
+    memory_consolidate_enabled: bool = True  # liga/desliga pelo painel
     memory_consolidate_interval_s: float = 21600.0  # 0 = só com /resumir
     memory_keep_days: float = 7.0  # episódios mais novos que isso ficam inteiros
+    # Vida do dono: ela anota planos e datas que você conta e puxa assunto depois.
+    vida_enabled: bool = True
+    vida_absence_hours: float = 20.0  # depois disso sem falar com ela, ela comenta que sentiu falta
 
     # --- Comportamento autônomo ---
     idle_think_interval_s: float = 180.0
@@ -194,7 +198,7 @@ class Settings(BaseSettings):
     secretaria_quando: Literal["ocupado", "sempre"] = "ocupado"
     secretaria_token: str = ""  # senha da ponte HTTP (vazio = AKEMI_TOKEN); mínimo 16 caracteres
     secretaria_host: str = "127.0.0.1"  # 0.0.0.0 para o celular alcançar pela rede de casa
-    secretaria_port: int = 8766
+    secretaria_port: int = 8767  # a 8766 é do painel
     secretaria_grupos: bool = False  # responder em grupos
     secretaria_ignorar: list[str] = []  # nomes ou números que ela nunca responde
     secretaria_max_por_contato: int = 4  # respostas por pessoa a cada 10 minutos
@@ -215,6 +219,11 @@ class Settings(BaseSettings):
     avatar_skin: Path | None = None  # pasta com parado.png, piscando.png, falando.png...
     avatar_perch: bool = True  # senta no topo da janela em foco (Windows)
     avatar_sleep_after_s: float = 300.0  # sem nada acontecendo, ela cochila
+
+    # --- Painel no navegador (docs/PAINEL.md) ---
+    painel_enabled: bool = True
+    painel_host: str = "127.0.0.1"  # fora do PC (ex. Docker): 0.0.0.0, e precisa de AKEMI_TOKEN
+    painel_port: int = 8766
 
     # --- Análise de arquivos (docs/ARQUIVOS.md) ---
     files_enabled: bool = True

@@ -54,6 +54,25 @@ jobs:
           # O que o teste criou não vai para o zip.
           Remove-Item -Recurse -Force "dist\Akemi\data", "dist\Akemi\.env"
 
+      # Assina o .exe e o _internal com a chave oficial (secret AKEMI_SIGNING_KEY).
+      # Sem o secret (PR de fork, chave ainda não criada) o build sai sem assinatura.
+      - name: Assinar
+        if: github.event_name != 'pull_request'
+        env:
+          AKEMI_SIGNING_KEY: ${{ secrets.AKEMI_SIGNING_KEY }}
+        run: python -m akemi.assinatura assinar dist/Akemi
+
+      - name: Conferir a assinatura
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          & dist\Akemi\Akemi.exe assinatura
+          $code = $LASTEXITCODE
+          # Rodar o .exe cria o .env: ele não pode ir no zip.
+          Remove-Item -Force -ErrorAction SilentlyContinue dist\Akemi\.env
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue dist\Akemi\data
+          if ($code -ne 0) { throw "o .exe não bate com a própria assinatura" }
+
       - name: Zipar
         shell: pwsh
         run: |

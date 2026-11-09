@@ -17,7 +17,9 @@ Comandos:
     /audio <texto>            simula algo ouvido no áudio do PC
     /pensar                   força um momento de pensamento
     /estado                   mostra humor, objetivo, tarefas, gostos e opiniões
-    /saude                    como ela está por dentro (cérebro em uso, voz, autocura)
+    /saude                    como ela está por dentro (cérebro em uso, voz, autocura, assinatura)
+    /assinatura               se ela é a Akemi oficial ou uma versão modificada
+    /painel                   abre o painel no navegador (ligar/desligar funções, ajustes)
     /mcp                      os apps conectados por MCP e as ferramentas de cada um
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
@@ -28,6 +30,8 @@ Comandos:
     /evoluir                  pede para ela revisar as conversas agora
     /memoria                  quanto ela lembra (lembranças, resumos, fatos)
     /resumir                  resume agora as lembranças antigas (MEMORY_KEEP_DAYS)
+    /vida                     seus planos e datas importantes que ela anotou
+    /esquecer_combinado N     ela esquece um plano ou data (número ou trecho)
     /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
     /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
     /casca                    o que o Claude Code/Codex estão fazendo (Modo Casca)
@@ -187,6 +191,29 @@ async def run(
             elif line == "/evoluir":
                 made = await akemi.evolve(force=True)
                 print("\n".join(p.describe() for p in made) or "  (nada para mudar agora)")
+            elif line == "/painel":
+                if akemi.panel is None:
+                    print("  (painel desligado: PAINEL_ENABLED=false, ou a porta estava ocupada; veja o log)")
+                else:
+                    import webbrowser
+
+                    print(f"  {akemi.panel.url}\n  (o link tem a senha do painel: não mande para ninguém)")
+                    try:
+                        webbrowser.open(akemi.panel.url)
+                    except Exception:  # noqa: BLE001 - sem navegador, o link já está aí
+                        pass
+            elif line == "/assinatura":
+                from akemi.assinatura import self_check
+
+                print(self_check().describe())
+            elif line == "/vida":
+                print("  " + (akemi.vida.describe() if akemi.vida else "(VIDA_ENABLED=false)").replace("\n", "\n  "))
+            elif line.startswith("/esquecer_combinado"):
+                which = line[len("/esquecer_combinado"):].strip()
+                if akemi.vida is None or not which:
+                    print("  uso: /esquecer_combinado <número ou trecho>")
+                else:
+                    print(f"  {akemi.vida.forget(which)} item(ns) esquecido(s)")
             elif line == "/memoria":
                 print(akemi.describe_memory())
             elif line == "/resumir":

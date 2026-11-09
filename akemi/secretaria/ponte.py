@@ -96,7 +96,7 @@ def reply_body(text: str) -> dict:
 
 
 class PonteChats:
-    def __init__(self, secretaria: Secretaria, token: str, host: str = "127.0.0.1", port: int = 8766,
+    def __init__(self, secretaria: Secretaria, token: str, host: str = "127.0.0.1", port: int = 8767,
                  reply_timeout_s: float = REPLY_TIMEOUT_S) -> None:
         if len(token) < MIN_TOKEN_LEN:
             raise ValueError(f"a ponte dos chats precisa de um token com pelo menos {MIN_TOKEN_LEN} caracteres")

@@ -12,7 +12,7 @@ const path = require('node:path');
 const { createBridge, loadEnv } = require('./ponte');
 
 const env = loadEnv([path.join(__dirname, '.env'), path.join(__dirname, '..', '..', '.env')]);
-const port = env.SECRETARIA_PORT || '8766';
+const port = env.SECRETARIA_PORT || '8767';
 const url = env.AKEMI_PONTE || `http://127.0.0.1:${port}/mensagem`;
 const token = env.SECRETARIA_TOKEN || env.AKEMI_TOKEN || '';
 if (token.length < 16) {

@@ -34,6 +34,7 @@ AKEMI_TOKEN=uma-senha-longa        # ou SECRETARIA_TOKEN, só para a ponte
 ```
 
 Gere a senha com `python -c "import secrets; print(secrets.token_urlsafe(24))"`.
+Também dá para ligar no painel (`/painel` → Secretária nos chats); vale quando ela religar.
 Depois é só abrir a Akemi (`akemi`). No terminal, `/dm Ana oi, ele tá aí?`
 simula uma mensagem, sem precisar ligar nenhum chat, e `/recados` mostra se
 você está ocupado, o que ela pode contar e os recados.
@@ -95,7 +96,7 @@ conectados → Conectar um aparelho e escaneie. Depois ele lembra (pasta
   por padrão).
 - A conversa continua **não lida** para você: ela responde sem marcar como lida.
 - Com a Akemi no servidor (Docker), aponte o script para lá:
-  `AKEMI_PONTE=http://IP-DO-SERVIDOR:8766/mensagem`.
+  `AKEMI_PONTE=http://IP-DO-SERVIDOR:8767/mensagem`.
 - `SECRETARIA_IGNORAR` aceita o número, ex. `["5511999999999"]`.
 
 > O script usa o [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js),
@@ -104,7 +105,7 @@ conectados → Conectar um aparelho e escaneie. Depois ele lembra (pasta
 
 **Sem PC ligado (Android):** apps de resposta automática, como o
 AutoResponder, leem a notificação e respondem por servidor. Aponte a regra
-para `http://IP-DO-PC:8766/mensagem?token=SUA-SENHA` e coloque
+para `http://IP-DO-PC:8767/mensagem?token=SUA-SENHA` e coloque
 `SECRETARIA_HOST=0.0.0.0` no `.env` (libere a porta no firewall). A ponte
 entende o formato dele (veja "Ponte HTTP" abaixo). Teste antes com uma mensagem sua.
 
@@ -190,7 +191,7 @@ só responde o que chegou depois que ela ligou.
 
 ### Ponte HTTP (qualquer outro)
 
-Com `SECRETARIA_ENABLED`, ela abre `http://127.0.0.1:8766/mensagem`. É por
+Com `SECRETARIA_ENABLED`, ela abre `http://127.0.0.1:8767/mensagem`. É por
 ela que o script do WhatsApp entra, e serve para qualquer outra coisa (SMS,
 n8n, um script seu): manda a mensagem e recebe a resposta dela.
 
@@ -224,7 +225,7 @@ No modo núcleo + corpo, a secretária roda no núcleo: ela continua respondendo
 com o PC desligado. Telegram, Discord e Teams funcionam sem abrir porta. Para a
 ponte HTTP (WhatsApp), adicione `SECRETARIA_ENABLED: "true"` e
 `SECRETARIA_HOST: 0.0.0.0` no `docker-compose.yml`, publique a porta
-`8766:8766` e aponte o script com `AKEMI_PONTE`.
+`8767:8767` e aponte o script com `AKEMI_PONTE`.
 
 ## Configuração
 
@@ -234,7 +235,7 @@ ponte HTTP (WhatsApp), adicione `SECRETARIA_ENABLED: "true"` e
 | `SECRETARIA_QUANDO` | `ocupado` | `ocupado` = só enquanto você está ocupado; `sempre` = responde toda mensagem |
 | `SECRETARIA_TOKEN` | (o `AKEMI_TOKEN`) | senha da ponte HTTP, com pelo menos 16 caracteres |
 | `SECRETARIA_HOST` | `127.0.0.1` | `0.0.0.0` para o celular alcançar pela rede |
-| `SECRETARIA_PORT` | `8766` | porta da ponte |
+| `SECRETARIA_PORT` | `8767` | porta da ponte |
 | `SECRETARIA_GRUPOS` | `false` | responder em grupos |
 | `SECRETARIA_IGNORAR` | `[]` | nomes ou números que ela nunca responde, ex. `["Chefe","5511999999999"]` |
 | `SECRETARIA_MAX_POR_CONTATO` | `4` | respostas por pessoa a cada 10 minutos (o resto vira só recado) |

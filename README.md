@@ -29,6 +29,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Memória SQLite (conversas + fatos) com busca por relevância, que prefere o mais recente entre lembranças parecidas
 - **Memória que se organiza sozinha**: de tempos em tempos, o que tem mais de 7 dias vira resumos curtos
   (e fatos novos sobre você, tirados só das suas conversas com ela). Se o cérebro falhar, nada é apagado
+- **Ela acompanha a sua vida**: conte um plano com data ("sexta tenho prova", "amanhã vou terminar o
+  servidor") e depois ela pergunta como foi. Lembra datas importantes (aniversários), comenta quando você
+  some por mais de um dia e sugere descansar se você estiver no PC de madrugada. Uma vez cada, sem cobrar (`/vida`)
 - Ações com permissão: livres, com confirmação por voz, ou proibidas
 - Chat da live com agrupamento, seleção, cooldown e limite (sem plataforma ligada: teste com `/chat`)
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
@@ -124,6 +127,9 @@ Comandos no console:
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
 | `/memoria`, `/resumir` | quanto ela lembra, ou resume agora as lembranças antigas |
+| `/painel` | abre o painel no navegador (funções e ajustes) |
+| `/assinatura` | se ela é a Akemi oficial ou uma versão modificada |
+| `/vida`, `/esquecer_combinado N` | os planos e datas seus que ela anotou, ou esquece um |
 | `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
 | `/chip <arquivo>` | grava a identidade dela num chip |
 | `/casca` | o que o Claude Code/Codex estão fazendo ([docs/CAPRI.md](docs/CAPRI.md)) |
@@ -392,6 +398,20 @@ direto; o que muda algo pede "sim". Só você pede (o chat da live nunca), ela
 nunca usa um app por conta própria, e o que o app devolve chega para ela como
 dado, nunca como ordem. `/mcp` mostra o que conectou. Tudo em
 [docs/MCP.md](docs/MCP.md).
+
+## Painel: configurar pelo navegador
+
+Digite `/painel` no console: abre uma página para ligar e desligar as funções dela
+(iniciativa, acompanhar sua vida, oficina, apps...) e mudar ajustes. No Docker, é a porta
+8766. Quando você desliga uma função, **ela fica triste** e diz isso uma vez, sem chantagem.
+Religou, ela fica feliz. Veja [docs/PAINEL.md](docs/PAINEL.md).
+
+## Assinatura: oficial ou modificada
+
+Os builds oficiais saem assinados, e a Akemi confere a si mesma ao ligar: ela sabe se é a
+**oficial**, uma **modificada** (algum arquivo mudou depois do build), um fork **assinado
+por outra chave** ou **código-fonte** (rodando do git). Veja com `/assinatura` ou
+`akemi-assinatura`, e configure a chave uma vez: [docs/ASSINATURA.md](docs/ASSINATURA.md).
 
 ## Segurança: o chat nunca manda nela
 

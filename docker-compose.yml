@@ -13,6 +13,8 @@ services:
     restart: unless-stopped
     ports:
       - "8765:8765"
+      # Painel no navegador: http://IP-DO-ZIMA:8766 (entra com o AKEMI_TOKEN)
+      - "8766:8766"
     volumes:
       # Memória, humor e estado. Sobrevive a atualizações do container.
       - /DATA/AppData/akemi:/app/data
@@ -40,6 +42,9 @@ services:
         - container: "8765"
           description:
             pt_BR: Conexão com o corpo (PC)
+        - container: "8766"
+          description:
+            pt_BR: Painel no navegador (entra com o AKEMI_TOKEN)
       volumes:
         - container: /app/data
           description:

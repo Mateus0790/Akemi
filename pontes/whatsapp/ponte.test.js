@@ -65,7 +65,7 @@ test('lê o .env sem sobrescrever o ambiente', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'akemi-'));
   const file = path.join(dir, '.env');
   fs.writeFileSync(file, '# comentário\nAKEMI_TOKEN="segredo-longo-1234567"\nSECRETARIA_PORT=9000\n');
-  const env = loadEnv([path.join(dir, 'nao-existe'), file], { SECRETARIA_PORT: '8766' });
+  const env = loadEnv([path.join(dir, 'nao-existe'), file], { SECRETARIA_PORT: '8767' });
   assert.equal(env.AKEMI_TOKEN, 'segredo-longo-1234567');
-  assert.equal(env.SECRETARIA_PORT, '8766');
+  assert.equal(env.SECRETARIA_PORT, '8767');
 });

@@ -7,6 +7,7 @@ Tudo o que faz ela ser *ela* (e não o modelo de linguagem que roda por baixo):
 - ``state.json``    — humor, objetivo, tarefas, pensamentos, último corpo
 - ``memory.sqlite3`` — conversas e fatos
 - ``voz.json``      — a impressão da voz do dono (opcional, sem áudio)
+- ``vida.json``     — planos e datas importantes do dono que ela anotou
 
 Com o chip dá para levar a Akemi para outro núcleo (outro PC, outro servidor)
 ou trocar o modelo (NIM, Ollama, Anthropic...) sem que ela perca quem é::
@@ -46,7 +47,8 @@ VERSION = 1
 MANIFEST = "manifest.json"
 PERSONA, EVOLUTION, STATE, MEMORY = "persona.yaml", "evolucao.json", "state.json", "memory.sqlite3"
 VOICE = "voz.json"  # impressão da voz do dono (sem áudio), se cadastrada
-FILES = (PERSONA, EVOLUTION, STATE, MEMORY, VOICE)  # nomes fixos: nada de caminhos vindos do zip
+LIFE = "vida.json"  # combinados e datas importantes do dono
+FILES = (PERSONA, EVOLUTION, STATE, MEMORY, VOICE, LIFE)  # nomes fixos: nada de caminhos vindos do zip
 MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_SMALL_BYTES = 2 * 1024 * 1024  # persona, estado e evolução são pequenos
 
@@ -115,7 +117,7 @@ def export_chip(
         if not persona_src.exists():
             persona_src = DEFAULT_PERSONA_PATH  # mesma regra do Persona.load
         staged[PERSONA] = Path(persona_src)
-        for name in (EVOLUTION, STATE, VOICE):
+        for name in (EVOLUTION, STATE, VOICE, LIFE):
             if (data_dir / name).exists():
                 staged[name] = data_dir / name
 
@@ -204,6 +206,13 @@ def _validate_contents(files: dict[str, Path]) -> None:
             VoicePrint.from_dict(json.loads(files[VOICE].read_text(encoding="utf-8")))
         except (ValueError, VoiceError) as exc:
             raise ChipError(f"voz inválida: {exc}") from exc
+    if LIFE in files:
+        from akemi.brain.vida import Vida
+
+        try:
+            Vida().load_dict(json.loads(files[LIFE].read_text(encoding="utf-8")))
+        except (ValueError, TypeError, KeyError) as exc:
+            raise ChipError(f"vida inválida: {exc}") from exc
     if MEMORY in files:
         try:
             db = sqlite3.connect(f"file:{files[MEMORY]}?mode=ro", uri=True)
