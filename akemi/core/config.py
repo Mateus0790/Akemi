@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # Memória: ela resume os dias antigos (como quem dorme) para o banco não crescer sem fim.
     memory_consolidate_interval_s: float = 21600.0  # 0 = só com /resumir
     memory_keep_days: float = 7.0  # episódios mais novos que isso ficam inteiros
+    # Vida do dono: ela anota planos e datas que você conta e puxa assunto depois.
+    vida_enabled: bool = True
+    vida_absence_hours: float = 20.0  # depois disso sem falar com ela, ela comenta que sentiu falta
 
     # --- Comportamento autônomo ---
     idle_think_interval_s: float = 180.0

@@ -34,6 +34,7 @@ from .persona import Persona
 from .providers.base import LLMProvider, Message, ProviderError
 from .state import MOODS, InnerState
 from .triggers import TriggerSet
+from .vida import Vida
 from .will import WillGuard, absorb_will
 
 logger = structlog.get_logger()
@@ -190,6 +191,9 @@ class Mind:
         self._live_lock = asyncio.Lock()
         self._guest_lock = asyncio.Lock()
         self._think_lock = asyncio.Lock()
+        # Vida do dono: combinados, datas importantes, saudade, madrugada (ver vida.py).
+        self.vida: Vida | None = None
+        self._background: set[asyncio.Task] = set()
 
     def register(self) -> None:
         self.bus.subscribe("owner.message", self.on_owner_message)
@@ -292,7 +296,7 @@ class Mind:
                 logger.warning("could not save state", error=str(exc))
 
     # ============================================================ contexto
-    def _context_block(self, query: str = "", include_actions: bool = False) -> str:
+    def _context_block(self, query: str = "", include_actions: bool = False, extra_hint: str = "") -> str:
         parts = [f"Agora são {time.strftime('%H:%M')}.", self.state.describe()]
         facts = self.memory.facts(15)
         if facts:
@@ -323,6 +327,8 @@ class Mind:
                     parts.append(extra)
             except Exception:  # contexto extra nunca derruba a resposta
                 logger.exception("context provider failed")
+        if extra_hint:
+            parts.append(extra_hint)
         if include_actions:
             if desc := self.actions.describe_for_prompt():
                 parts.append(desc)
@@ -338,9 +344,13 @@ class Mind:
         decision = self.attention.decide(event, self.state, paused=self.pause.paused)
         if decision.route == Route.IGNORE:
             return
+        previous_at = self.state.last_owner_interaction_at
         self.state.last_owner_interaction_at = time.time()
         self._novelty += 1
         self.owner_channel = event.source
+        if self.vida is not None and event.trust >= Trust.OWNER:
+            self.vida.owner_spoke(previous_at)
+            self._in_background(self._vida_learn(text))
 
         async with self._owner_lock:
             if self.look is not None and SCREEN_QUESTION.search(text):
@@ -403,14 +413,17 @@ class Mind:
                 await self._run_direct(direct, text, event)
                 return
 
+            life_hint, life_keys = self.vida.hints(reply=True) if self.vida is not None else ("", [])
             system = self.persona.system_prompt(
-                extra=self._context_block(text, include_actions=True)
+                extra=self._context_block(text, include_actions=True, extra_hint=life_hint)
             )
             messages = [Message("system", system), *self.history, Message("user", text)]
             logger.info("owner message", route=decision.route.value)
             raw = await self._generate_and_speak(messages, decision.route, event)
             if not raw:
                 return
+            if life_keys and self.vida is not None:
+                self.vida.said(life_keys)  # ela já teve a chance de falar disso: não repete
             self._apply_mood_tag(raw)
             spoken, calls = parse_action_calls(raw)
             if not calls and ACTION_PROMISE_RE.search(spoken):
@@ -686,6 +699,8 @@ class Mind:
         if self.pause.paused or self._think_lock.locked():
             return
         nothing_new = self._novelty == self._novelty_at_last_thought
+        if self.vida is not None and self.vida.has_news():
+            nothing_new = False  # tem algo da vida dele para puxar
         if nothing_new and time.time() - self._last_thought_at < self.max_quiet_s:
             logger.debug("idle think skipped: nothing new")
             return
@@ -697,6 +712,9 @@ class Mind:
         """Um "momento de consciência": reflete, ajusta humor e talvez fala."""
         self._novelty_at_last_thought = self._novelty
         self._last_thought_at = time.time()
+        life_hint, life_keys = self.vida.hints(reply=False) if self.vida is not None else ("", [])
+        if life_hint:
+            hint = f"{hint}\n{life_hint}".strip()
         system = self.persona.system_prompt(extra=self._context_block())
         already = list(self.state.recent_thoughts)[-3:]
         avoid = (
@@ -765,8 +783,28 @@ class Mind:
             speak = await self._take_initiative(data, speak)
         if speak and self.attention.can_speak_unprompted(self.state):
             self.say(speak, Event("mind.thought", source="mind", trust=Trust.SYSTEM, priority=Priority.LOW))
+            if life_keys and self.vida is not None:
+                self.vida.said(life_keys)  # só conta como dito se ela falou mesmo
         self._save_state()
         return data
+
+    # ========================================================= vida do dono
+    def _in_background(self, coro) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _vida_learn(self, text: str) -> None:
+        """Anota combinados e datas da fala do dono, sem atrasar a resposta."""
+        if self.vida is None:
+            return
+        try:
+            learned = await self.vida.learn(text, self.models.fast, self.models.fast_model)
+        except Exception:  # nunca derruba a conversa
+            logger.exception("vida learn crashed")
+            return
+        if learned:
+            self._novelty += 1
 
     # ============================================================ iniciativa
     def _can_take_initiative(self) -> bool:

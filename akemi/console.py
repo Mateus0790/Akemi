@@ -27,6 +27,8 @@ Comandos:
     /evoluir                  pede para ela revisar as conversas agora
     /memoria                  quanto ela lembra (lembranças, resumos, fatos)
     /resumir                  resume agora as lembranças antigas (MEMORY_KEEP_DAYS)
+    /vida                     seus planos e datas importantes que ela anotou
+    /esquecer_combinado N     ela esquece um plano ou data (número ou trecho)
     /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
     /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
     /casca                    o que o Claude Code/Codex estão fazendo (Modo Casca)
@@ -181,6 +183,14 @@ async def run(
             elif line == "/evoluir":
                 made = await akemi.evolve(force=True)
                 print("\n".join(p.describe() for p in made) or "  (nada para mudar agora)")
+            elif line == "/vida":
+                print("  " + (akemi.vida.describe() if akemi.vida else "(VIDA_ENABLED=false)").replace("\n", "\n  "))
+            elif line.startswith("/esquecer_combinado"):
+                which = line[len("/esquecer_combinado"):].strip()
+                if akemi.vida is None or not which:
+                    print("  uso: /esquecer_combinado <número ou trecho>")
+                else:
+                    print(f"  {akemi.vida.forget(which)} item(ns) esquecido(s)")
             elif line == "/memoria":
                 print(akemi.describe_memory())
             elif line == "/resumir":

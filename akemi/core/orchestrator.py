@@ -23,6 +23,7 @@ from akemi.brain.persona import Persona
 from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
 from akemi.brain.providers.base import Message
 from akemi.brain.self_improve import Evolution, Proposal
+from akemi.brain.vida import Vida, register_vida_actions
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
 from akemi.chamada import CallMode, register_call_actions
@@ -274,6 +275,12 @@ class Akemi:
         if self.clipper is not None:
             self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
         self.mind.context_providers += [self.arcade.describe_for_prompt, self.call.describe_for_prompt]
+        self.vida: Vida | None = None
+        if settings.vida_enabled:
+            self.vida = Vida(data / "vida.json" if persist else None, owner=settings.owner_name,
+                             absence_hours=settings.vida_absence_hours)
+            self.mind.vida = self.vida
+            register_vida_actions(self.actions, self.vida)
         self.mind.ambient_filters.append(self.call.swallow_ambient)
         self.mind.owner_filters.append(self.call.mic_echo)
         self.call.on_change.append(self._call_audio)

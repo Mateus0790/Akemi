@@ -29,6 +29,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Memória SQLite (conversas + fatos) com busca por relevância, que prefere o mais recente entre lembranças parecidas
 - **Memória que se organiza sozinha**: de tempos em tempos, o que tem mais de 7 dias vira resumos curtos
   (e fatos novos sobre você, tirados só das suas conversas com ela). Se o cérebro falhar, nada é apagado
+- **Ela acompanha a sua vida**: conte um plano com data ("sexta tenho prova", "amanhã vou terminar o
+  servidor") e depois ela pergunta como foi. Lembra datas importantes (aniversários), comenta quando você
+  some por mais de um dia e sugere descansar se você estiver no PC de madrugada. Uma vez cada, sem cobrar (`/vida`)
 - Ações com permissão: livres, com confirmação por voz, ou proibidas
 - Chat da live com agrupamento, seleção, cooldown e limite (sem plataforma ligada: teste com `/chat`)
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
@@ -120,6 +123,7 @@ Comandos no console:
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
 | `/memoria`, `/resumir` | quanto ela lembra, ou resume agora as lembranças antigas |
+| `/vida`, `/esquecer_combinado N` | os planos e datas seus que ela anotou, ou esquece um |
 | `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
 | `/chip <arquivo>` | grava a identidade dela num chip |
 | `/casca` | o que o Claude Code/Codex estão fazendo ([docs/CAPRI.md](docs/CAPRI.md)) |
