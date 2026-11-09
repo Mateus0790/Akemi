@@ -18,7 +18,7 @@ import asyncio
 import httpx
 import structlog
 
-from . import Mensagem, Secretaria
+from . import Mensagem, Secretaria, assinar
 
 logger = structlog.get_logger()
 
@@ -125,8 +125,9 @@ class TelegramChats:
         if not reply:
             return
         payload = {"chat_id": chat["id"], "text": reply}
-        if business:
+        if business:  # sai pela sua conta: vai marcada
             payload["business_connection_id"] = business
+            payload["text"] = assinar(reply)
         await self._call("sendMessage", payload)
         self.answered += 1
 

@@ -8,6 +8,7 @@
     python -m akemi.console --celular  # deixa o app do celular conectar (precisa de AKEMI_TOKEN)
     python -m akemi.console --cadastrar-voz   # ela aprende a reconhecer a sua voz
     python -m akemi.console --casca claude    # liga o Modo Casca (claude|codex|ambos|desligar)
+    python -m akemi.console --teams-login     # entra na sua conta do Teams (secretária nos chats)
 
 Comandos:
     /chat <nick> <mensagem>   simula uma mensagem do chat da live
@@ -269,6 +270,25 @@ async def run(
         await akemi.stop()
 
 
+async def teams_login(settings: Settings) -> int:
+    """Login por código na conta do Teams (docs/SECRETARIA.md). Guarda o acesso em data/teams.json."""
+    from akemi.secretaria.teams import TOKEN_FILE, TeamsAuth, TeamsError
+
+    if not settings.teams_client_id.strip():
+        print("Falta o TEAMS_CLIENT_ID no .env (o registro de app no Entra ID). Veja docs/SECRETARIA.md.")
+        return 2
+    auth = TeamsAuth(settings.teams_client_id, settings.teams_tenant, settings.data_dir / TOKEN_FILE)
+    try:
+        account = await auth.device_login(print)
+    except TeamsError as exc:
+        print(f"Não deu: {exc}")
+        return 1
+    finally:
+        await auth.aclose()
+    print(f"Pronto, conectada ao Teams como {account or 'você'}. Com SECRETARIA_ENABLED=true, é só abrir a Akemi.")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Converse com a Akemi pelo terminal")
     parser.add_argument("--echo", action="store_true", help="usa o provider offline de teste")
@@ -281,7 +301,11 @@ def main() -> None:
     parser.add_argument("--listar-mics", action="store_true", help="lista os microfones e sai")
     parser.add_argument("--casca", choices=["claude", "codex", "ambos", "desligar"],
                         help="liga o Modo Casca: ela vira o corpo do Claude Code/Codex (e sai)")
+    parser.add_argument("--teams-login", action="store_true",
+                        help="entra na sua conta do Teams para a secretária responder lá (e sai)")
     args = parser.parse_args()
+    if args.teams_login:
+        raise SystemExit(asyncio.run(teams_login(Settings())))
     if args.casca:
         from akemi.casca.install import HookError, configure, save_mode
 

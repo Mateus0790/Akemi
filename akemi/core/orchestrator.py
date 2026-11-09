@@ -378,6 +378,26 @@ class Akemi:
             self.chat_bridges.append(telegram)
             sec.canais.append("telegram")
             self._tasks.append(self._supervised("telegram", telegram.run, "conexão com o Telegram"))
+        if s.discord_bot_token.strip():
+            from akemi.secretaria.discord import DiscordChats
+
+            discord = DiscordChats(sec, s.discord_bot_token, s.discord_dono_id, presence=s.discord_presenca)
+            self.chat_bridges.append(discord)
+            sec.canais.append("discord")
+            self._tasks.append(self._supervised("discord", discord.run, "conexão com o Discord"))
+        if s.teams_client_id.strip():
+            from akemi.secretaria.teams import TOKEN_FILE, TeamsAuth, TeamsChats
+
+            auth = TeamsAuth(s.teams_client_id, s.teams_tenant, s.data_dir / TOKEN_FILE)
+            if not auth.has_login():
+                logger.warning("teams off: run akemi --teams-login once")
+                await auth.aclose()
+            else:
+                teams = TeamsChats(sec, auth, interval_s=s.teams_intervalo_s, presence=s.teams_presenca,
+                                   groups=s.secretaria_grupos)
+                self.chat_bridges.append(teams)
+                sec.canais.append("teams")
+                self._tasks.append(self._supervised("teams", teams.run, "conexão com o Teams"))
 
     def _game_result(self, title: str, winner: str) -> None:
         what = {"dono": f"{self.settings.owner_name} ganhou", "akemi": "você ganhou", "empate": "empatou"}[winner]

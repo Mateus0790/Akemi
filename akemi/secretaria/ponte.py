@@ -17,6 +17,8 @@ Resposta (sempre 200 com o token certo)::
     {"resposta": "Oi! Aqui é a Akemi...", "replies": [{"message": "Oi! Aqui é a Akemi..."}]}
 
 Resposta vazia (``"resposta": ""``, ``"replies": []``) = ela fica quieta.
+A resposta vem marcada com 🤖, porque sai pela sua conta e quem recebe vê seu
+nome; ``"marcar": false`` tira a marca (ex.: quando a ponte é um bot próprio).
 ``do_dono: true`` avisa que foi você que escreveu na conversa: ela sai de cena
 com essa pessoa por um tempo.
 
@@ -35,7 +37,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import structlog
 
-from . import Mensagem, Secretaria
+from . import Mensagem, Secretaria, assinar
 
 logger = structlog.get_logger()
 
@@ -211,7 +213,8 @@ class PonteChats:
             except asyncio.TimeoutError:
                 logger.warning("chat bridge: reply took too long")
                 reply = None
-        return 200, reply_body(reply or "")
+        mark = not isinstance(data, dict) or data.get("marcar", True) is not False
+        return 200, reply_body(assinar(reply or "") if mark else reply or "")
 
 
 class _Reject(Exception):

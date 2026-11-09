@@ -1,7 +1,7 @@
 # Secretária nos chats
 
-A Akemi responde quem te manda mensagem (WhatsApp, Telegram, Discord...)
-enquanto você está ocupado:
+A Akemi responde quem te manda mensagem no WhatsApp, Telegram, Discord e
+Teams enquanto você está ocupado:
 
 - **Diz que você está ocupado** e quando volta, se você disse.
 - **Anota os recados** e conta tudo quando você volta.
@@ -60,13 +60,139 @@ vem do próprio chat. Não ponha ali nada que não possa chegar em qualquer um.
 
 ## Ligando os chats
 
-As mensagens chegam por uma **ponte**. Há dois jeitos.
+Cada app deixa entrar de um jeito, e nem todos deixam responder pela sua conta:
 
-### Ponte HTTP (WhatsApp, Discord, SMS, qualquer um)
+| Chat | Como ela entra | Responde na sua conta? | Oficial? |
+|---|---|---|---|
+| **WhatsApp** | aparelho conectado (QR code), pelo script `pontes/whatsapp` | sim, marcado com 🤖 | não: risco de bloqueio |
+| **Telegram** | bot do @BotFather + Telegram Business | sim, com Premium (senão, no bot) | sim |
+| **Discord** | bot nos seus servidores | não: responde quando te marcam e na DM do bot | sim |
+| **Teams** | login Microsoft (conta de trabalho ou escola) | sim, nas conversas 1:1, marcado com 🤖 | sim |
 
-Com `SECRETARIA_ENABLED`, ela abre `http://127.0.0.1:8766/mensagem`. Quem
-estiver no meio (um app de resposta automática, um script, o n8n) manda a
-mensagem e recebe a resposta dela:
+O que ela manda **pela sua conta** vai sempre marcado com 🤖, porque quem
+recebe vê o seu nome. Em todos, quando **você** responde uma conversa, ela
+fica quieta com aquela pessoa por 30 minutos, e o que não é texto (áudio,
+foto, figurinha) vira recado ("mandou um áudio").
+
+### WhatsApp
+
+Precisa do [Node.js](https://nodejs.org) 18 ou mais novo. Com a Akemi aberta
+(e `SECRETARIA_ENABLED=true`):
+
+```powershell
+cd pontes\whatsapp
+npm install
+npm start
+```
+
+Na primeira vez aparece um QR code: no celular, abra o WhatsApp → Aparelhos
+conectados → Conectar um aparelho e escaneie. Depois ele lembra (pasta
+`pontes/whatsapp/.sessao`, não compartilhe). O script lê o `AKEMI_TOKEN` do
+`.env` da Akemi sozinho.
+
+- Ele entra como um aparelho conectado, igual ao WhatsApp Web, e manda cada
+  mensagem para a Akemi. Ela decide se responde (só quando você está ocupado,
+  por padrão).
+- A conversa continua **não lida** para você: ela responde sem marcar como lida.
+- Com a Akemi no servidor (Docker), aponte o script para lá:
+  `AKEMI_PONTE=http://IP-DO-SERVIDOR:8766/mensagem`.
+- `SECRETARIA_IGNORAR` aceita o número, ex. `["5511999999999"]`.
+
+> O script usa o [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js),
+> que não é oficial. O WhatsApp pode bloquear contas que usam automação: use
+> por sua conta e risco (de preferência, teste antes com um número que não é o principal).
+
+**Sem PC ligado (Android):** apps de resposta automática, como o
+AutoResponder, leem a notificação e respondem por servidor. Aponte a regra
+para `http://IP-DO-PC:8766/mensagem?token=SUA-SENHA` e coloque
+`SECRETARIA_HOST=0.0.0.0` no `.env` (libere a porta no firewall). A ponte
+entende o formato dele (veja "Ponte HTTP" abaixo). Teste antes com uma mensagem sua.
+
+### Telegram
+
+1. Crie um bot com o [@BotFather](https://t.me/BotFather) e copie o token.
+2. No `.env`: `TELEGRAM_BOT_TOKEN=123456:ABC...`
+3. Para ela responder **na sua conta**, e não só no bot: no Telegram, vá em
+   Configurações → Telegram Business → Chatbots e escolha o seu bot (precisa
+   do Telegram Premium). Sem isso, as pessoas falam com ela escrevendo para o bot.
+
+Ela busca as mensagens sozinha (long polling): não precisa abrir porta.
+
+### Discord
+
+O Discord não deixa nenhum bot ler as suas DMs pessoais, e automatizar a sua
+conta ("selfbot") é proibido e dá banimento. Por isso ela entra como bot, do
+jeito permitido:
+
+- **Num servidor:** quando alguém te marca (@você) ou responde uma mensagem
+  sua enquanto você está ocupado, ela responde no canal. Ela nunca marca
+  ninguém (nada de @everyone). Se você escrever no canal, ela sai de cena ali.
+- **Na DM do bot:** quem escrever para ela deixa recado.
+- **"Não perturbe"** (com `DISCORD_PRESENCA=true`): colocar esse status no
+  Discord já liga o modo ocupado; voltar a ficar online desliga e ela conta os recados.
+
+Para ligar:
+
+1. Em [discord.com/developers/applications](https://discord.com/developers/applications):
+   New Application → Bot → Reset Token, e copie o token.
+2. Ainda em Bot, em Privileged Gateway Intents, ligue **Message Content Intent**
+   (e **Presence Intent**, se for usar `DISCORD_PRESENCA`).
+3. Em OAuth2 → URL Generator, marque `bot` e as permissões View Channels, Send
+   Messages e Read Message History. Abra o link e adicione o bot nos seus servidores.
+4. Seu ID: no Discord, Configurações → Avançado → Modo desenvolvedor; depois
+   clique com o direito no seu nome → Copiar ID.
+5. No `.env` (e `pip install -e ".[discord]"`):
+
+```
+DISCORD_BOT_TOKEN=o-token-do-bot
+DISCORD_DONO_ID=123456789012345678
+# DISCORD_PRESENCA=true
+```
+
+### Microsoft Teams
+
+Funciona com conta de **trabalho ou escola** (o Teams pessoal não tem API),
+pela API oficial da Microsoft (Graph). Responder conversas do trabalho com uma
+IA pode ir contra as regras da sua empresa: confira antes, e muitas empresas
+exigem que o TI aprove o app.
+
+- **Conversas 1:1** (e grupos, com `SECRETARIA_GRUPOS=true`): ela responde
+  pela sua conta, marcada com 🤖.
+- **Status do Teams** (`TEAMS_PRESENCA`, ligado por padrão): em reunião, numa
+  ligação, apresentando ou em "Não incomodar", ela liga o modo ocupado sozinha
+  e **não fala nada** (para a voz dela não entrar no seu microfone). Quando
+  você fica livre, ela conta os recados. Um modo ocupado que você ligou ("tô
+  em aula") não é desligado pelo Teams.
+
+Para ligar:
+
+1. Em [entra.microsoft.com](https://entra.microsoft.com): Identidade →
+   Aplicativos → Registros de aplicativo → Novo registro. Nome: Akemi. Não
+   precisa de URI de redirecionamento.
+2. Em Autenticação, ligue **Permitir fluxos de clientes públicos**.
+3. Em Permissões de API → Microsoft Graph → Permissões delegadas, adicione
+   `User.Read`, `Chat.Read`, `ChatMessage.Send` e `Presence.Read`.
+4. Copie o **ID do aplicativo (cliente)**. Se o app for só da sua empresa
+   ("somente este diretório"), copie também o **ID do diretório (locatário)**.
+5. No `.env`:
+
+```
+TEAMS_CLIENT_ID=00000000-0000-0000-0000-000000000000
+# TEAMS_TENANT=id-do-diretorio   # se o app for só da sua empresa
+```
+
+6. Uma vez: `akemi --teams-login`. Ela mostra um código para você digitar em
+   microsoft.com/devicelogin e guarda o acesso em `data/teams.json` (é uma
+   chave: não compartilhe). Se o acesso vencer, ela avisa no log para rodar de novo.
+
+Ela olha as conversas a cada `TEAMS_INTERVALO_S` segundos (15 por padrão) e
+só responde o que chegou depois que ela ligou.
+
+### Ponte HTTP (qualquer outro)
+
+Com `SECRETARIA_ENABLED`, ela abre `http://127.0.0.1:8766/mensagem`. É por
+ela que o script do WhatsApp entra, e serve para qualquer outra coisa (SMS,
+n8n, um script seu): manda a mensagem e recebe a resposta dela.
 
 ```http
 POST /mensagem
@@ -78,7 +204,7 @@ Content-Type: application/json
 ```
 
 ```json
-{"resposta": "Oi! Aqui é a Akemi...", "replies": [{"message": "Oi! Aqui é a Akemi..."}]}
+{"resposta": "🤖 Oi! Aqui é a Akemi...", "replies": [{"message": "🤖 Oi! Aqui é a Akemi..."}]}
 ```
 
 - A senha também pode ir em `X-Akemi-Token` ou em `?token=` na URL.
@@ -86,42 +212,19 @@ Content-Type: application/json
   está ocupado, é um grupo, a pessoa está na lista de ignorar...
 - Mande `"do_dono": true` quando **você** escrever na conversa: ela sai de cena
   com essa pessoa por 30 minutos.
+- A resposta vem com 🤖 (sai pela sua conta). `"marcar": false` tira a marca,
+  para quando quem manda é um bot próprio.
 - Ela também entende o formato do "servidor próprio" do AutoResponder
   (`{"query": {"sender": ..., "message": ..., "isGroup": ...}}`) e devolve
   `replies` do jeito que ele espera.
 
-**WhatsApp pelo celular (Android):** apps de resposta automática, como o
-AutoResponder, leem a notificação da mensagem e respondem por você. Crie uma
-regra que responde por servidor e aponte para
-`http://IP-DO-PC:8766/mensagem?token=SUA-SENHA`. Para o celular alcançar o PC
-pela rede de casa, coloque `SECRETARIA_HOST=0.0.0.0` no `.env` (e libere a
-porta no firewall do Windows). Teste antes com uma mensagem sua.
-
-**WhatsApp pelo PC:** um script com uma biblioteca do WhatsApp Web (como o
-whatsapp-web.js) pode mandar cada mensagem para a ponte e responder com o que
-volta.
-
-> Apps e bibliotecas não oficiais do WhatsApp podem ir contra os termos de uso
-> dele e levar a conta a ser bloqueada. Use por sua conta e risco.
-
-### Telegram (API oficial)
-
-1. Crie um bot com o [@BotFather](https://t.me/BotFather) e copie o token.
-2. No `.env`: `TELEGRAM_BOT_TOKEN=123456:ABC...`
-3. Para ela responder **na sua conta**, e não só no bot: no Telegram, vá em
-   Configurações → Telegram Business → Chatbots e escolha o seu bot (precisa
-   do Telegram Premium). Sem isso, as pessoas falam com ela escrevendo para o bot.
-
-Ela busca as mensagens sozinha (long polling): não precisa abrir porta. Quando
-você mesmo responde uma conversa, ela fica quieta com essa pessoa por 30
-minutos. Áudio, foto e figurinha viram recado ("mandou um áudio").
-
 ## Servidor 24h
 
 No modo núcleo + corpo, a secretária roda no núcleo: ela continua respondendo
-com o PC desligado. No `docker-compose.yml`, adicione `SECRETARIA_ENABLED: "true"`
-e `SECRETARIA_HOST: 0.0.0.0` e publique a porta `8766:8766` (para o Telegram,
-basta o `TELEGRAM_BOT_TOKEN`; não precisa de porta).
+com o PC desligado. Telegram, Discord e Teams funcionam sem abrir porta. Para a
+ponte HTTP (WhatsApp), adicione `SECRETARIA_ENABLED: "true"` e
+`SECRETARIA_HOST: 0.0.0.0` no `docker-compose.yml`, publique a porta
+`8766:8766` e aponte o script com `AKEMI_PONTE`.
 
 ## Configuração
 
@@ -136,6 +239,13 @@ basta o `TELEGRAM_BOT_TOKEN`; não precisa de porta).
 | `SECRETARIA_IGNORAR` | `[]` | nomes ou números que ela nunca responde, ex. `["Chefe","5511999999999"]` |
 | `SECRETARIA_MAX_POR_CONTATO` | `4` | respostas por pessoa a cada 10 minutos (o resto vira só recado) |
 | `TELEGRAM_BOT_TOKEN` | | liga o Telegram |
+| `DISCORD_BOT_TOKEN` | | liga o Discord |
+| `DISCORD_DONO_ID` | | seu ID no Discord (para saber quando te marcam) |
+| `DISCORD_PRESENCA` | `false` | "Não perturbe" no Discord liga o modo ocupado |
+| `TEAMS_CLIENT_ID` | | liga o Teams (depois rode `akemi --teams-login`) |
+| `TEAMS_TENANT` | `organizations` | o ID do diretório, se o app for só da sua empresa |
+| `TEAMS_PRESENCA` | `true` | reunião ou ligação no Teams liga o modo ocupado |
+| `TEAMS_INTERVALO_S` | `15` | de quanto em quanto tempo ela olha o Teams |
 
 ## Privacidade e segurança
 

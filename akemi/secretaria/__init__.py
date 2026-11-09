@@ -19,8 +19,9 @@ Segurança:
   na conversa, ela fica quieta com aquela pessoa por um tempo.
 - Links e e-mails só saem se estiverem no que você deixou contar.
 
-As mensagens chegam pela ponte HTTP (:mod:`.ponte`) ou pelo Telegram
-(:mod:`.telegram`). Tudo em docs/SECRETARIA.md.
+As mensagens chegam pelo Telegram (:mod:`.telegram`), Discord (:mod:`.discord`),
+Teams (:mod:`.teams`) ou pela ponte HTTP (:mod:`.ponte`), que é por onde o
+WhatsApp entra (``pontes/whatsapp``). Tudo em docs/SECRETARIA.md.
 """
 
 from __future__ import annotations
@@ -56,6 +57,13 @@ GLOBAL_PER_MINUTE = 12
 TAKEOVER_S = 1800.0  # você respondeu na conversa: ela fica quieta com essa pessoa
 URGENT_GAP_S = 600.0  # um aviso de urgência por contato nesse tempo
 MAX_TEXT = 500
+# Marca das mensagens que ela manda pela SUA conta (WhatsApp, Teams, Telegram Business):
+# quem recebe vê seu nome, então cada mensagem dela vai marcada.
+BOT_MARK = "🤖 "
+
+
+def assinar(text: str) -> str:
+    return text if not text or text.startswith(BOT_MARK) else BOT_MARK + text
 
 URGENT_RE = re.compile(
     r"\b(urgente|urg[eê]ncia|emerg[eê]ncia|socorro|hospital|acidente|me liga agora|liga agora)\b",
@@ -129,6 +137,7 @@ class Status:
     motivo: str = ""  # "em reunião", "em aula"...
     ate: float | None = None  # quando ele volta (se disse)
     desde: float = 0.0
+    origem: str = ""  # "" = ele disse; "teams"/"discord" = ela viu o status dele lá
 
 
 @dataclass
@@ -232,6 +241,33 @@ class Secretaria:
         lead = "Passou o horário que você disse, então tirei o modo ocupado." if auto else "Bem-vindo de volta!"
         return f"{lead} {self.tell_recados()}"
 
+    def set_auto_busy(self, origem: str, busy: bool, motivo: str = "") -> str:
+        """O status dele em outro app mudou (reunião no Teams, "Não perturbe" no Discord).
+
+        O que ele disse vale mais: um modo ocupado que ele ligou não é desligado por
+        isso. Ao entrar ela não fala nada (ele pode estar numa reunião com o microfone
+        aberto); ao sair, conta os recados.
+        """
+        st = self.status
+        if busy:
+            if st.ocupado and not st.origem:
+                return ""
+            motivo = " ".join(str(motivo or "").split())[:60]
+            if st.ocupado and st.origem == origem and st.motivo == motivo:
+                return ""
+            self.status = Status(True, motivo, None, st.desde if st.ocupado else self.clock(), origem)
+            self._save()
+            logger.info("secretaria: busy from app status", origem=origem, motivo=motivo)
+            return ""
+        if not (st.ocupado and st.origem == origem):
+            return ""
+        said = self.set_free(auto=True)
+        if said:
+            said = said.replace("Passou o horário que você disse, então tirei o modo ocupado.",
+                                f"Vi no {origem.capitalize()} que você ficou livre.")
+            self.notify(said, False)
+        return said
+
     def check_expiry(self) -> str:
         """Chamada de tempos em tempos: o horário que ele disse passou? Volta ao normal e conta."""
         if self.status.ocupado and self.status.ate is not None and self.clock() >= self.status.ate:
@@ -309,7 +345,8 @@ class Secretaria:
         logger.info("secretaria: owner took over", contato=msg.contato)
 
     def _ignored(self, msg: Mensagem) -> bool:
-        names = {msg.contato.strip().lower(), msg.contato_id.strip().lower()} - {""}
+        cid = msg.contato_id.strip().lower()
+        names = {msg.contato.strip().lower(), cid, cid.split("@")[0]} - {""}  # "5511...@c.us" -> número
         return bool(names & self.ignorar)
 
     def _skip(self, why: str) -> None:
@@ -474,7 +511,8 @@ class Secretaria:
 
     def describe(self) -> str:
         st = self.status
-        lines = [f"  {self.owner}: {self._busy_text() if st.ocupado else 'livre'}"
+        via = f" (pelo {st.origem.capitalize()})" if st.ocupado and st.origem else ""
+        lines = [f"  {self.owner}: {self._busy_text() + via if st.ocupado else 'livre'}"
                  f" | responde: {'sempre' if self.quando == 'sempre' else 'quando você está ocupado'}"
                  f" | chats ligados: {', '.join(self.canais) or 'nenhum'}"]
         lines.append("  pode contar: " + (" | ".join(self.infos) if self.infos else "nada"))
@@ -509,7 +547,8 @@ class Secretaria:
             st = data.get("status") or {}
             ate = st.get("ate")
             self.status = Status(bool(st.get("ocupado")), str(st.get("motivo") or "")[:60],
-                                 float(ate) if ate is not None else None, float(st.get("desde") or 0))
+                                 float(ate) if ate is not None else None, float(st.get("desde") or 0),
+                                 str(st.get("origem") or "")[:20])
             self.infos = [str(i)[:300] for i in data.get("pode_contar") or [] if str(i).strip()][-MAX_INFOS:]
             self.recados = [
                 Recado(str(r["de"])[:60], str(r.get("plataforma") or "chat"), str(r["texto"])[:300],

@@ -307,10 +307,10 @@ async def test_bridge_round_trip():
                                   headers={"Authorization": f"Bearer {token}"})
             assert r.status_code == 200
             body = r.json()
-            assert body["resposta"].startswith("Oi! Aqui é a Akemi") and body["replies"] == [{"message": body["resposta"]}]
+            assert body["resposta"].startswith("🤖 Oi! Aqui é a Akemi") and body["replies"] == [{"message": body["resposta"]}]
             r = await client.post(f"{url}?token={token}", json={
                 "messengerPackageName": "com.whatsapp", "query": {"sender": "Bia", "message": "oi", "isGroup": False}})
-            assert r.json()["replies"][0]["message"].startswith("Oi! Aqui é a Akemi")
+            assert r.json()["replies"][0]["message"].startswith("🤖 Oi! Aqui é a Akemi")
             r = await client.post(url, json={"contato": "Ana", "texto": "eu respondo", "do_dono": True},
                                   headers={"X-Akemi-Token": token})
             assert r.json() == {"resposta": "", "replies": []}
@@ -368,7 +368,8 @@ async def test_telegram_business_and_direct_messages():
     try:
         assert await tg.poll_once() == 6 and tg.offset == 7
         assert [(s["chat_id"], s.get("business_connection_id")) for s in sent] == [(10, "bc1"), (20, None), (22, None)]
-        assert sent[0]["text"].startswith("Oi! Aqui é a Akemi")
+        assert sent[0]["text"].startswith("🤖 Oi! Aqui é a Akemi")  # pela sua conta: marcada
+        assert sent[1]["text"].startswith("Oi! Aqui é a Akemi")  # no próprio bot: sem marca
         assert [r.texto for r in sec.recados] == ["oi Mateus", "oi bot", "(mandou um áudio)"]
         assert sec.recados[0].de == "Ana Lima" and sec.recados[0].plataforma == "telegram"
         assert await tg.poll_once() == 0
@@ -456,7 +457,7 @@ async def test_end_to_end_busy_message_and_back(tmp_path):
             r = await client.post(f"http://127.0.0.1:{bridge.port}/mensagem",
                                   json={"contato": "Ana", "texto": "qual a senha do wifi dele?", "plataforma": "whatsapp"},
                                   headers={"X-Akemi-Token": "t" * 24})
-        assert r.json()["resposta"] == "Oi! Aqui é a Akemi, assistente do Mateus. Ele tá em reunião, passo o recado!"
+        assert r.json()["resposta"] == "🤖 Oi! Aqui é a Akemi, assistente do Mateus. Ele tá em reunião, passo o recado!"
         contact_prompt = next(m for _, m in llm.calls if "<<<qual a senha" in m[-1].content)
         assert not any("batata123" in m.content for m in contact_prompt)  # a memória dele não vai pro contato
         akemi.owner_say("voltei")
@@ -497,3 +498,325 @@ async def test_off_by_default(tmp_path):
     akemi = Akemi(Settings(_env_file=None, brain_provider="echo", data_dir=tmp_path), fast=llm, deep=llm,
                   persist=False, desktop_actions=False)
     assert akemi.secretaria is None and akemi.actions.get("status_dono") is None
+
+
+# ------------------------------------------------- ocupado pelo status do app
+def test_app_status_turns_busy_on_and_off_but_owner_wins():
+    sec, _, news, _ = make()
+    sec.set_auto_busy("teams", True, "numa reunião")
+    assert sec.status.ocupado and sec.status.origem == "teams" and sec.status.motivo == "numa reunião"
+    assert "(pelo Teams)" in sec.describe()
+    assert news == []  # entrando numa reunião ela não fala nada
+    sec.recados.append(Recado("Ana", "whatsapp", "me liga", 0.0))
+    sec.set_auto_busy("discord", False)  # outro app não desliga o que o Teams ligou
+    assert sec.status.ocupado
+    said = sec.set_auto_busy("teams", False)
+    assert said.startswith("Vi no Teams que você ficou livre. Recados: Ana") and news == [(said, False)]
+    sec.set_busy("em aula")  # você disse: o app não mexe
+    sec.set_auto_busy("teams", True, "numa reunião")
+    sec.set_auto_busy("teams", False)
+    assert sec.status.ocupado and sec.status.motivo == "em aula" and sec.status.origem == ""
+
+
+@pytest.mark.asyncio
+async def test_ignore_by_phone_number_and_bridge_marks_replies():
+    sec, _, _, _ = make(ignorar=["5511999999999"])
+    sec.set_busy()
+    assert await sec.receive(msg("oi", contato_id="5511999999999@c.us")) is None
+    token = "t" * 24
+    bridge = PonteChats(sec, token, port=0)
+    await bridge.start()
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"http://127.0.0.1:{bridge.port}/mensagem"
+            r = await client.post(url, json={"contato": "Bia", "texto": "oi"}, headers={"X-Akemi-Token": token})
+            assert r.json()["resposta"].startswith("🤖 Oi! Aqui é a Akemi")
+            r = await client.post(url, json={"contato": "Caio", "texto": "oi", "marcar": False},
+                                  headers={"X-Akemi-Token": token})
+            assert r.json()["resposta"].startswith("Oi! Aqui é a Akemi")
+    finally:
+        await bridge.stop()
+
+
+# ------------------------------------------------------------------ Discord
+class FakeWS:
+    def __init__(self, frames, close_code=None):
+        self.frames = list(frames)
+        self.sent = []
+        self.close_code = close_code
+
+    async def recv(self):
+        return json.dumps(self.frames.pop(0))
+
+    async def send(self, data):
+        self.sent.append(json.loads(data))
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self.frames:
+            raise StopAsyncIteration
+        item = self.frames.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return json.dumps(item)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def discord_bot(sec, sessions, **kw):
+    from akemi.secretaria.discord import DiscordChats
+
+    posts = []
+
+    def handler(request):
+        posts.append((request.url.path, request.headers["Authorization"], json.loads(request.content)))
+        return httpx.Response(200, json={"id": "999"})
+
+    def connect(url, **opts):
+        return sessions.pop(0)
+
+    bot = DiscordChats(sec, "tok", "100", client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+                       connect=connect, **kw)
+    return bot, posts
+
+
+def dc_message(content, author_id="200", channel="50", guild="7", mentions=(), mid="1", **extra):
+    msg = {"id": mid, "channel_id": channel, "content": content,
+           "author": {"id": author_id, "username": f"user{author_id}", "global_name": "Ana"},
+           "mentions": [{"id": m, "username": "mateus", "global_name": "Mateus"} for m in mentions], **extra}
+    if guild:
+        msg["guild_id"] = guild
+    return {"op": 0, "t": "MESSAGE_CREATE", "s": 2, "d": msg}
+
+
+@pytest.mark.asyncio
+async def test_discord_answers_mentions_and_dms_and_steps_aside():
+    sec, seen, _, _ = make()
+    sec.set_busy("jogando")
+    ws = FakeWS([
+        {"op": 10, "d": {"heartbeat_interval": 60000}},
+        {"op": 0, "t": "READY", "s": 1, "d": {"user": {"id": "300", "username": "akemi"}}},
+        dc_message("<@100> bora jogar?", mentions=["100"], mid="11"),
+        dc_message("conversa normal no canal", mid="12"),
+        dc_message("sou um bot", author_id="400", mentions=["100"]),
+        dc_message("oi akemi, avisa ele que eu liguei", guild=None, channel="60", author_id="201", mid="13"),
+        dc_message("ele respondeu você?", channel="51", mid="14",
+                   referenced_message={"author": {"id": "100"}}),
+        dc_message("tô aqui, falei", author_id="100", channel="50", mid="15"),
+        dc_message("<@100> e aí?", mentions=["100"], mid="16"),
+        {"op": 7, "d": None},
+    ])
+    ws.frames[4]["d"]["author"]["bot"] = True
+    bot, posts = discord_bot(sec, [ws])
+    try:
+        await bot.session()
+        identify = ws.sent[0]
+        assert identify["op"] == 2 and identify["d"]["token"] == "tok"
+        assert identify["d"]["intents"] & (1 << 15) and not identify["d"]["intents"] & (1 << 8)
+        assert bot.bot_id == "300" and bot.seq == 2
+        assert [p[0] for p in posts] == ["/api/v10/channels/50/messages", "/api/v10/channels/60/messages",
+                                         "/api/v10/channels/51/messages"]
+        path, auth, body = posts[0]
+        assert auth == "Bot tok" and body["message_reference"]["message_id"] == "11"
+        assert body["allowed_mentions"] == {"parse": [], "replied_user": False}
+        assert body["content"].startswith("Oi! Aqui é a Akemi")  # bot do Discord: já aparece como bot
+        assert seen[0][-1].content.endswith("<<<@Mateus bora jogar?>>>")
+        assert [r.texto for r in sec.recados] == ["@Mateus bora jogar?", "oi akemi, avisa ele que eu liguei",
+                                                  "ele respondeu você?"]
+    finally:
+        await bot.stop()
+
+
+@pytest.mark.asyncio
+async def test_discord_presence_and_fatal_close():
+    from websockets.exceptions import ConnectionClosedError
+    from websockets.frames import Close
+
+    sec, _, _, _ = make()
+    sec.canais.append("discord")
+    ws = FakeWS([
+        {"op": 10, "d": {"heartbeat_interval": 60000}},
+        {"op": 0, "t": "PRESENCE_UPDATE", "s": 1, "d": {"user": {"id": "100"}, "status": "dnd"}},
+    ])
+    bad = FakeWS([{"op": 10, "d": {"heartbeat_interval": 60000}},
+                  ConnectionClosedError(Close(4014, "Disallowed intent(s)"), None)])
+    bot, _ = discord_bot(sec, [ws, bad], presence=True)
+    try:
+        await bot.session()
+        assert sec.status.ocupado and sec.status.origem == "discord"
+        assert ws.sent[0]["d"]["intents"] & (1 << 8)
+        await bot.dispatch({"op": 0, "t": "PRESENCE_UPDATE", "d": {"user": {"id": "100"}, "status": "online"}})
+        assert not sec.status.ocupado
+        await bot.run()  # 4014: não adianta reconectar, desliga
+        assert sec.canais == []
+    finally:
+        await bot.stop()
+
+
+# -------------------------------------------------------------------- Teams
+def test_teams_html_and_presence_reasons():
+    from akemi.secretaria.teams import html_to_text
+
+    assert html_to_text({"contentType": "html", "content": "<p>oi&nbsp;<at id=\"0\">Mateus</at></p><p>tá aí?</p>"}) \
+        == "oi Mateus tá aí?"
+    assert html_to_text({"contentType": "text", "content": " oi "}) == "oi"
+
+
+@pytest.mark.asyncio
+async def test_teams_device_login_and_refresh(tmp_path):
+    import os
+    import stat
+
+    from akemi.secretaria.teams import TeamsAuth, TeamsAuthError
+
+    polls = iter([{"error": "authorization_pending"}, {"access_token": "A1", "refresh_token": "R1", "expires_in": 3600}])
+    refresh = {"ok": True}
+
+    def handler(request):
+        path = request.url.path
+        form = dict(x.split("=", 1) for x in request.content.decode().split("&")) if request.content else {}
+        if path.endswith("/devicecode"):
+            assert "ChatMessage.Send" in request.content.decode().replace("+", " ").replace("%20", " ")
+            return httpx.Response(200, json={"device_code": "D", "user_code": "ABC-123", "interval": 1,
+                                             "expires_in": 900, "verification_uri": "https://microsoft.com/devicelogin"})
+        if path.endswith("/token"):
+            if form.get("grant_type") == "refresh_token":
+                if not refresh["ok"]:
+                    return httpx.Response(400, json={"error": "invalid_grant"})
+                return httpx.Response(200, json={"access_token": "A2", "refresh_token": "R2", "expires_in": 3600})
+            data = next(polls)
+            return httpx.Response(400 if "error" in data else 200, json=data)
+        if path == "/v1.0/me":
+            return httpx.Response(200, json={"id": "me", "displayName": "Mateus Silva"})
+        return httpx.Response(404)
+
+    path = tmp_path / "teams.json"
+    shown, slept = [], []
+
+    async def sleep(s):
+        slept.append(s)
+
+    auth = TeamsAuth("cid", "organizations", path, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    assert not auth.has_login()
+    assert await auth.device_login(shown.append, sleep=sleep) == "Mateus Silva"
+    assert "ABC-123" in shown[0] and slept == [1.0, 1.0]
+    saved = json.loads(path.read_text())
+    assert saved["refresh_token"] == "R1" and saved["conta"] == "Mateus Silva"
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert await auth.token() == "A1"  # ainda vale
+    assert await auth.token(force=True) == "A2" and json.loads(path.read_text())["refresh_token"] == "R2"
+    refresh["ok"] = False
+    with pytest.raises(TeamsAuthError):
+        await auth.token(force=True)
+    await auth.aclose()
+
+
+@pytest.mark.asyncio
+async def test_teams_replies_in_one_on_one_chats_and_follows_presence(tmp_path):
+    from datetime import timezone
+
+    from akemi.secretaria.teams import TeamsAuth, TeamsChats
+
+    start = datetime(2026, 11, 9, 13, 0, tzinfo=timezone.utc)
+    state = {"presence": {"availability": "Busy", "activity": "InAMeeting"}, "sent": [], "round": 0}
+    chats = {"value": [
+        {"id": "c1", "chatType": "oneOnOne", "lastMessagePreview": {"createdDateTime": "2026-11-09T13:00:09.5Z"}},
+        {"id": "c2", "chatType": "group", "lastMessagePreview": {"createdDateTime": "2026-11-09T13:00:09Z"}},
+        {"id": "c3", "chatType": "oneOnOne", "lastMessagePreview": {"createdDateTime": "2026-11-09T12:00:00Z"}},
+    ]}
+
+    def message(mid, when, user_id, name, text):
+        return {"id": mid, "messageType": "message", "createdDateTime": when,
+                "from": {"user": {"id": user_id, "displayName": name}},
+                "body": {"contentType": "html", "content": f"<p>{text}</p>"}}
+
+    def handler(request):
+        path, method = request.url.path, request.method
+        if path.endswith("/token"):
+            return httpx.Response(200, json={"access_token": "A", "refresh_token": "R", "expires_in": 3600})
+        assert request.headers["Authorization"] == "Bearer A"
+        if path == "/v1.0/me":
+            return httpx.Response(200, json={"id": "me", "displayName": "Mateus"})
+        if path == "/v1.0/me/presence":
+            return httpx.Response(200, json=state["presence"])
+        if path == "/v1.0/me/chats":
+            assert request.url.params["$expand"] == "lastMessagePreview"
+            return httpx.Response(200, json=chats)
+        if path == "/v1.0/chats/c1/messages" and method == "GET":
+            items = [message("m0", "2026-11-09T12:59:00Z", "u1", "Ana", "antiga"),
+                     message("m1", "2026-11-09T13:00:05Z", "u1", "Ana", "oi, ele tá livre?")]
+            if state["round"]:
+                items += [message("akemi1", "2026-11-09T13:00:06Z", "me", "Mateus", "🤖 resposta dela"),
+                          message("m2", "2026-11-09T13:00:20Z", "me", "Mateus", "voltei, Ana")]
+            return httpx.Response(200, json={"value": list(reversed(items))})
+        if path == "/v1.0/chats/c1/messages" and method == "POST":
+            state["sent"].append(json.loads(request.content))
+            return httpx.Response(201, json={"id": "akemi1"})
+        return httpx.Response(404, json={})
+
+    (tmp_path / "teams.json").write_text(json.dumps({"refresh_token": "R0"}))
+    sec, _, news, _ = make()
+    auth = TeamsAuth("cid", "organizations", tmp_path / "teams.json",
+                     client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    teams = TeamsChats(sec, auth, now=lambda: start)
+    teams.me_id = "me"
+    try:
+        await teams.poll_once()
+        assert sec.status.ocupado and sec.status.origem == "teams" and sec.status.motivo == "numa reunião"
+        assert [b["body"]["content"] for b in state["sent"]] == [
+            "🤖 Oi! Aqui é a Akemi, a assistente do Mateus. Ele tá ocupado agora, mas eu passo o recado."]
+        assert [r.texto for r in sec.recados] == ["oi, ele tá livre?"]  # a antiga (de antes dela ligar) não
+        state["round"] = 1
+        chats["value"][0]["lastMessagePreview"]["createdDateTime"] = "2026-11-09T13:00:20Z"
+        await teams.poll_once()
+        conv = sec._conversas["teams:c1"]
+        assert conv.owner_until > 0  # "voltei, Ana" foi você; a resposta dela (akemi1) não conta
+        assert len(state["sent"]) == 1
+        state["presence"] = {"availability": "Available", "activity": "Available"}
+        await teams.poll_once()
+        assert not sec.status.ocupado and news[-1][0].startswith("Vi no Teams que você ficou livre. Recados: Ana")
+    finally:
+        await teams.stop()
+
+
+@pytest.mark.asyncio
+async def test_teams_without_login_turns_itself_off(tmp_path):
+    from akemi.secretaria.teams import TeamsAuth, TeamsChats
+
+    sec, _, _, _ = make()
+    sec.canais.append("teams")
+    auth = TeamsAuth("cid", "organizations", tmp_path / "nada.json",
+                     client=httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(500))))
+    await TeamsChats(sec, auth).run()
+    assert sec.canais == []
+    await auth.aclose()
+
+
+# ---------------------------------------------------------- ponte do WhatsApp
+def test_whatsapp_bridge_script():
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    if shutil.which("node") is None:
+        pytest.skip("sem Node.js")
+    folder = Path(__file__).resolve().parent.parent / "pontes" / "whatsapp"
+    result = subprocess.run(["node", "--test"], cwd=folder, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+
+
+@pytest.mark.asyncio
+async def test_teams_configured_without_login_does_not_start(tmp_path):
+    akemi, _, _ = make_akemi(tmp_path, lambda m, j: "ok", teams_client_id="cid")
+    await akemi.start()
+    try:
+        assert "teams" not in akemi.secretaria.canais and len(akemi.chat_bridges) == 1  # só a ponte HTTP
+    finally:
+        await akemi.stop()

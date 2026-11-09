@@ -60,9 +60,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
   Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
 - **Secretária nos chats** ([docs/SECRETARIA.md](docs/SECRETARIA.md)): "tô em reunião até as 15h"
-  e ela responde quem te manda mensagem (WhatsApp, Telegram...) dizendo que você está ocupado,
+  e ela responde quem te manda mensagem no WhatsApp, Telegram, Discord e Teams dizendo que você está ocupado,
   conta só o que você deixou ("pode dizer que eu chego às 19h"), anota os recados e te avisa
-  na hora se for urgente
+  na hora se for urgente. No Teams ela percebe sozinha quando você está em reunião
 
 - **Ideias do [Capri](https://github.com/lachydotmcg/capri-desktop)** ([docs/CAPRI.md](docs/CAPRI.md)):
   - **Modo Casca** (`akemi --casca claude`): ela vira o corpo do Claude Code e do Codex
