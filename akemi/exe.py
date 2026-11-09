@@ -7,6 +7,7 @@ Um executável só para tudo:
     Akemi.exe corpo --voz --mic  # igual a ``akemi-corpo``
     Akemi.exe servidor           # igual a ``akemi-servidor``
     Akemi.exe chip exportar x    # igual a ``akemi-chip``
+    Akemi.exe assinatura         # igual a ``akemi-assinatura``: oficial ou modificada?
     Akemi.exe debug              # igual a ``akemi-debug``
 
 Também aceita ``Akemi.exe -m akemi.casca.hook claude``, que é o comando que o
@@ -30,6 +31,7 @@ SUBCOMMANDS = {
     "corpo": ("akemi.net.body", "main"),
     "servidor": ("akemi.net.server", "main"),
     "chip": ("akemi.storage.chip", "main"),
+    "assinatura": ("akemi.assinatura", "main"),
     "debug": ("akemi.debug", "main"),
 }
 

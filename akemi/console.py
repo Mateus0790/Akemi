@@ -16,7 +16,8 @@ Comandos:
     /audio <texto>            simula algo ouvido no áudio do PC
     /pensar                   força um momento de pensamento
     /estado                   mostra humor, objetivo, tarefas, gostos e opiniões
-    /saude                    como ela está por dentro (cérebro em uso, voz, autocura)
+    /saude                    como ela está por dentro (cérebro em uso, voz, autocura, assinatura)
+    /assinatura               se ela é a Akemi oficial ou uma versão modificada
     /mcp                      os apps conectados por MCP e as ferramentas de cada um
     /pausar | /voltar         pausa/retoma a autonomia
     /corpo                    mostra em que corpo ela está e os sentidos dele
@@ -183,6 +184,10 @@ async def run(
             elif line == "/evoluir":
                 made = await akemi.evolve(force=True)
                 print("\n".join(p.describe() for p in made) or "  (nada para mudar agora)")
+            elif line == "/assinatura":
+                from akemi.assinatura import self_check
+
+                print(self_check().describe())
             elif line == "/vida":
                 print("  " + (akemi.vida.describe() if akemi.vida else "(VIDA_ENABLED=false)").replace("\n", "\n  "))
             elif line.startswith("/esquecer_combinado"):

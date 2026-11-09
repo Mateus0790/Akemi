@@ -23,6 +23,7 @@ from akemi.brain.persona import Persona
 from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
 from akemi.brain.providers.base import Message
 from akemi.brain.self_improve import Evolution, Proposal
+from akemi.assinatura import self_check
 from akemi.brain.vida import Vida, register_vida_actions
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
@@ -571,14 +572,14 @@ class Akemi:
         return asyncio.create_task(supervise(name, factory, self.health, label=label), name=name)
 
     def health_report(self) -> dict:
-        report = {"partes": self.health.snapshot()}
+        report = {"partes": self.health.snapshot(), "codigo": self_check().to_dict()}
         for key, provider in (("cerebro", self.models.fast), ("cerebro_profundo", self.models.deep)):
             if isinstance(provider, FallbackProvider):
                 report[key] = provider.status()
         return report
 
     def describe_health(self) -> str:
-        lines = [self.health.describe()]
+        lines = [self.health.describe(), self_check().describe()]
         if not isinstance(self.models.fast, FallbackProvider):
             lines.append(f"  cérebro: {self.models.fast.name} (sem reserva: veja BRAIN_FALLBACK)")
         for key, provider in (("cérebro", self.models.fast), ("cérebro profundo", self.models.deep)):
@@ -695,6 +696,12 @@ class Akemi:
             self.bus.publish(Event("tick.idle", source="timer", priority=Priority.LOW))
 
     async def start(self) -> None:
+        # Ela confere a própria assinatura em segundo plano (o .exe tem muitos MB)
+        # e passa a saber se é a oficial ou uma versão modificada.
+        check = await asyncio.to_thread(self_check)
+        logger.info("code signature", status=check.status, fingerprint=check.fingerprint[:12])
+        if line := check.for_prompt():
+            self.mind.context_providers.append(lambda: line)
         self.mind.register()
         self.speaker.register()
         self.bus.subscribe("ambient.screen", self._check_lookout)
