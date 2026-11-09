@@ -50,6 +50,9 @@ class Action:
     # que recebe os parâmetros e devolve a pergunta (ou levanta ValueError se não fizer sentido).
     confirm: str | Callable[..., str] = ""
     example: tuple[str, str] | None = None  # (pedido do dono, tag): modelos seguem exemplos
+    # O resultado volta para o cérebro, que conta ao dono com as próprias palavras
+    # (ex.: ferramentas de apps via MCP, que devolvem dados em vez de uma frase pronta).
+    summarize: bool = False
 
 
 @dataclass
@@ -70,6 +73,14 @@ class ActionResult:
 class PendingConfirmation:
     call: ActionCall
     created_at: float = field(default_factory=time.time)
+
+
+def accepted_args(fn: Callable[..., Any], args: dict[str, Any]) -> dict[str, Any]:
+    """Os argumentos que ``fn`` aceita (todos, se ela recebe ``**kwargs``)."""
+    params = inspect.signature(fn).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return dict(args)
+    return {k: v for k, v in args.items() if k in params}
 
 
 def describe_call(call: ActionCall) -> str:
@@ -133,6 +144,10 @@ class ActionRegistry:
     def add(self, action: Action) -> None:
         self._actions[action.name] = action
 
+    def remove(self, name: str) -> None:
+        self._actions.pop(name, None)
+        self.initiative.discard(name)
+
     def get(self, name: str) -> Action | None:
         return self._actions.get(name)
 
@@ -147,9 +162,15 @@ class ActionRegistry:
             "agendou algo sem escrever a tag correspondente.",
             "Ações disponíveis:",
         ]
-        for a in self._actions.values():
-            if a.tier == Tier.FORBIDDEN or (only is not None and a.name not in only):
-                continue
+        shown = [a for a in self._actions.values()
+                 if a.tier != Tier.FORBIDDEN and (only is None or a.name in only)]
+        if any(a.summarize for a in shown):
+            lines.insert(-1,
+                "Ações [app ...] usam outros aplicativos e devolvem um resultado que você recebe logo "
+                "depois para contar ao dono: escreva só uma frase curta (ex.: \"Deixa eu ver.\") e a tag, "
+                "sem inventar a resposta."
+            )
+        for a in shown:
             ps = ", ".join(f"{k}: {v}" for k, v in a.params.items()) or "sem parâmetros"
             conf = " (pede confirmação)" if a.tier == Tier.CONFIRM else ""
             ex = f' Ex.: "{a.example[0]}" -> {a.example[1]}' if a.example else ""
@@ -213,10 +234,8 @@ class ActionRegistry:
 
     def _confirm_text(self, action: Action, call: ActionCall) -> str:
         if callable(action.confirm):
-            sig = inspect.signature(action.confirm)
-            accepted = {k: v for k, v in call.args.items() if k in sig.parameters}
             try:
-                return action.confirm(**accepted) + " Diz sim ou não."
+                return action.confirm(**accepted_args(action.confirm, call.args)) + " Diz sim ou não."
             except TypeError as exc:
                 raise ValueError("faltou informação para isso") from exc
         if action.confirm:
@@ -290,15 +309,16 @@ class ActionRegistry:
 
     async def _run(self, action: Action, call: ActionCall) -> ActionResult:
         try:
-            sig = inspect.signature(action.fn)
-            accepted = {k: v for k, v in call.args.items() if k in sig.parameters}
-            value = action.fn(**accepted)
+            value = action.fn(**accepted_args(action.fn, call.args))
             if inspect.isawaitable(value):
                 value = await value
             logger.info("action executed", action=action.name)
             return ActionResult(action.name, "executed", "", value)
         except Exception as exc:
-            logger.exception("action failed", action=action.name)
+            if getattr(exc, "expected", False):  # erro previsto (ex.: o app recusou): sem stack trace
+                logger.warning("action failed", action=action.name, error=str(exc))
+            else:
+                logger.exception("action failed", action=action.name)
             return ActionResult(action.name, "error", str(exc))
 
 
