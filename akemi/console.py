@@ -25,6 +25,8 @@ Comandos:
     /prs                      os PRs que ela abriu ou tentou abrir
     /evolucao                 o que ela mudou em si (e o que está pendente)
     /evoluir                  pede para ela revisar as conversas agora
+    /memoria                  quanto ela lembra (lembranças, resumos, fatos)
+    /resumir                  resume agora as lembranças antigas (MEMORY_KEEP_DAYS)
     /desfazer N               tira uma mudança dela (/aprovar N, /rejeitar N sem modo autônomo)
     /chip <arquivo>           grava a identidade dela num chip (akemi-chip)
     /casca                    o que o Claude Code/Codex estão fazendo (Modo Casca)
@@ -179,6 +181,11 @@ async def run(
             elif line == "/evoluir":
                 made = await akemi.evolve(force=True)
                 print("\n".join(p.describe() for p in made) or "  (nada para mudar agora)")
+            elif line == "/memoria":
+                print(akemi.describe_memory())
+            elif line == "/resumir":
+                print("  (resumindo...)")
+                print("  " + (await akemi.consolidate_memory()).describe())
             elif line.split()[0] in ("/aprovar", "/rejeitar", "/desfazer"):
                 cmd, _, arg = line.partition(" ")
                 arg = arg.strip().lstrip("#")

@@ -26,7 +26,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Personalidade editável (`akemi/brain/persona.yaml`)
 - Estado interno persistente com humor que muda e decai
 - Pensamento ocioso: ela reflete sozinha e decide se fala algo
-- Memória SQLite (conversas + fatos) com busca por relevância
+- Memória SQLite (conversas + fatos) com busca por relevância, que prefere o mais recente entre lembranças parecidas
+- **Memória que se organiza sozinha**: de tempos em tempos, o que tem mais de 7 dias vira resumos curtos
+  (e fatos novos sobre você, tirados só das suas conversas com ela). Se o cérebro falhar, nada é apagado
 - Ações com permissão: livres, com confirmação por voz, ou proibidas
 - Chat da live com agrupamento, seleção, cooldown e limite (sem plataforma ligada: teste com `/chat`)
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
@@ -117,6 +119,7 @@ Comandos no console:
 | `/pausar`, `/voltar` | pausa/retoma a autonomia |
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
+| `/memoria`, `/resumir` | quanto ela lembra, ou resume agora as lembranças antigas |
 | `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
 | `/chip <arquivo>` | grava a identidade dela num chip |
 | `/casca` | o que o Claude Code/Codex estão fazendo ([docs/CAPRI.md](docs/CAPRI.md)) |

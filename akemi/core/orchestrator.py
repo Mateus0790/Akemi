@@ -17,6 +17,7 @@ from akemi.actions.lookout import Lookout, register_lookout_actions
 from akemi.actions.registry import ActionRegistry, Tier
 from akemi.actions.reminders import Reminders, register_reminder_actions
 from akemi.actions.routines import Routines, register_routine_actions
+from akemi.brain.consolidation import ConsolidationReport, consolidate
 from akemi.brain.mind import Mind, Models
 from akemi.brain.persona import Persona
 from akemi.brain.providers import FallbackProvider, LLMProvider, build_brains
@@ -652,6 +653,34 @@ class Akemi:
             except Exception as exc:  # nunca derruba a Akemi
                 logger.warning("evolution round failed", error=str(exc))
 
+    # ------------------------------------------------------------ memória
+    async def consolidate_memory(self) -> ConsolidationReport:
+        """Troca os episódios antigos por resumos (e tira fatos das conversas com o dono)."""
+        return await consolidate(
+            self.memory, self.models.fast, self.models.fast_model,
+            owner=self.settings.owner_name, keep_days=self.settings.memory_keep_days,
+            moderator=self.moderator,
+        )
+
+    def describe_memory(self) -> str:
+        st = self.memory.stats()
+        oldest = (time.strftime("%d/%m/%Y", time.localtime(st["mais_antigo"]))
+                  if st["mais_antigo"] else "—")
+        kinds = ", ".join(f"{k}: {n}" for k, n in sorted(st["por_tipo"].items())) or "nada"
+        return (
+            f"  {st['episodios']} lembranças inteiras e {st['resumos']} resumos ({kinds})\n"
+            f"  {st['fatos']} fatos guardados | mais antiga: {oldest}\n"
+            f"  resume o que tem mais de {self.settings.memory_keep_days:g} dias"
+        )
+
+    async def _memory_ticker(self) -> None:
+        while True:
+            await asyncio.sleep(self.settings.memory_consolidate_interval_s)
+            try:
+                await self.consolidate_memory()
+            except Exception as exc:  # nunca derruba a Akemi
+                logger.warning("memory consolidation failed", error=str(exc))
+
     # ----------------------------------------------------------- ciclo
     async def _idle_ticker(self) -> None:
         while True:
@@ -677,6 +706,8 @@ class Akemi:
             self._tasks.append(self._supervised("idle", self._idle_ticker, "rotina de pensamentos"))
         if self.persist and self.settings.self_improve_interval_s > 0:
             self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
+        if self.persist and self.settings.memory_consolidate_interval_s > 0:
+            self._tasks.append(self._supervised("memory", self._memory_ticker, "rotina da memória"))
         self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
         if self.mcp is not None:  # conecta em segundo plano: o npx pode demorar
             self._tasks.append(self._supervised("mcp", self.mcp.run, "conexão com os apps"))

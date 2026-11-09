@@ -40,6 +40,7 @@ VTuber de IA.
 | `core/senses.py` | Liga microfone, áudio do PC e tela a um barramento (usado no modo local e no corpo). |
 | `net/` | Núcleo como servidor WebSocket (`server.py`), corpo no PC (`body.py`) e protocolo. |
 | `brain/self_improve.py` | Autoevolução: propostas de mudança na persona, aprovadas pelo dono ([CAPRICORNIO.md](CAPRICORNIO.md)). |
+| `brain/consolidation.py` | Consolidação da memória: episódios antigos viram resumos por dia e origem; fatos só das conversas com o dono. |
 | `storage/chip.py` | Chip de identidade: exporta/importa persona, estado, memória e evolução (`akemi-chip`). |
 | `tts/base.py` | `Speaker`: único caminho para falar; interrompe quando o dono começa a falar. |
 | `avatar/` | Avatar de desktop (desativado por enquanto): janela Tk transparente que senta nas janelas, reage a `speech.*`, `casca.*` e ao humor ([CAPRI.md](CAPRI.md)). |
