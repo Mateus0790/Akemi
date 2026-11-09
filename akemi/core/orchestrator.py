@@ -25,6 +25,7 @@ from akemi.brain.providers.base import Message
 from akemi.brain.self_improve import Evolution, Proposal
 from akemi.assinatura import self_check
 from akemi.brain.vida import Vida, register_vida_actions
+from akemi.painel import FEATURE_BY_KEY, FEATURES, VALUES, PanelChoices, PanelError, PanelServer, load_token
 from akemi.brain.state import InnerState
 from akemi.brain.triggers import TriggerSet
 from akemi.chamada import CallMode, register_call_actions
@@ -190,6 +191,12 @@ class Akemi:
         self.health = Health(self.bus)
         self.pause = PauseSwitch()
         data = settings.data_dir
+        # O que foi escolhido no painel vale por cima do .env (data/painel.json).
+        self.panel_choices = PanelChoices(data / "painel.json" if persist else None)
+        self.panel_choices.apply(settings)
+        self._boot_settings = {f.key: getattr(settings, f.key) for f in FEATURES}
+        self._boot_settings.update({v.key: getattr(settings, v.key) for v in VALUES})
+        self.panel: PanelServer | None = None
         self.state_path = data / "state.json" if persist else None
         self.state = InnerState.load(self.state_path) if self.state_path else InnerState()
         self.memory = memory or Memory(data / "memory.sqlite3" if persist else ":memory:")
@@ -276,12 +283,11 @@ class Akemi:
         if self.clipper is not None:
             self.mind.shortcuts.insert(0, self.clipper.shortcut)  # "clipa isso" é na hora
         self.mind.context_providers += [self.arcade.describe_for_prompt, self.call.describe_for_prompt]
-        self.vida: Vida | None = None
-        if settings.vida_enabled:
-            self.vida = Vida(data / "vida.json" if persist else None, owner=settings.owner_name,
-                             absence_hours=settings.vida_absence_hours)
-            self.mind.vida = self.vida
-            register_vida_actions(self.actions, self.vida)
+        # A vida existe sempre (o que ela anotou não some); o painel liga e desliga.
+        self.vida = Vida(data / "vida.json" if persist else None, owner=settings.owner_name,
+                         absence_hours=settings.vida_absence_hours)
+        self._set_vida(settings.vida_enabled)
+        self.mind.context_providers.append(self._features_for_prompt)
         self.mind.ambient_filters.append(self.call.swallow_ambient)
         self.mind.owner_filters.append(self.call.mic_echo)
         self.call.on_change.append(self._call_audio)
@@ -684,10 +690,130 @@ class Akemi:
     async def _memory_ticker(self) -> None:
         while True:
             await asyncio.sleep(self.settings.memory_consolidate_interval_s)
+            if not self.settings.memory_consolidate_enabled:
+                continue
             try:
                 await self.consolidate_memory()
             except Exception as exc:  # nunca derruba a Akemi
                 logger.warning("memory consolidation failed", error=str(exc))
+
+    # ------------------------------------------------------------- painel
+    def _set_vida(self, on: bool) -> None:
+        self.mind.vida = self.vida if on else None
+        if on:
+            register_vida_actions(self.actions, self.vida)
+        else:
+            for name in ("listar_combinados", "esquecer_combinado"):
+                self.actions.remove(name)
+
+    def _apply_live(self, key: str, value) -> None:
+        """Muda na hora o que dá para mudar com ela ligada."""
+        if key == "vida_enabled":
+            self._set_vida(bool(value))
+        elif key == "initiative_enabled":
+            self.mind.initiative = bool(value)
+        elif key == "self_improve_autonomous":
+            self.evolution.autonomous = bool(value)
+        elif key == "vida_absence_hours":
+            self.vida.absence_s = float(value) * 3600
+        elif key == "min_seconds_between_unprompted_speech":
+            self.mind.attention.min_unprompted_gap_s = float(value)
+        # memory_consolidate_enabled e memory_keep_days são lidos na hora de usar.
+
+    def _current_features(self) -> dict[str, bool]:
+        return {f.key: bool(getattr(self.settings, f.key)) for f in FEATURES}
+
+    def _features_for_prompt(self) -> str:
+        off = [f.label for f in FEATURES if not getattr(self.settings, f.key)]
+        if not off:
+            return ""
+        return ("Funções suas que estão desligadas agora: " + ", ".join(off) + ". "
+                "Não diga que faz essas coisas. Se perguntarem, conte que estão desligadas; "
+                "não fique pedindo para religar.")
+
+    async def feel_features(self, while_off: bool = False) -> str:
+        """Ela percebe funções desligadas (fica triste) ou religadas (fica feliz)."""
+        now = self._current_features()
+        before = dict(self.state.features)
+        self.state.features = now
+        if self.state_path:
+            self.state.save(self.state_path)
+        if not before:
+            return ""  # primeira vez: só aprende o que tem
+        turned_off = [FEATURE_BY_KEY[k] for k, on in now.items() if not on and before.get(k, False)]
+        turned_on = [FEATURE_BY_KEY[k] for k, on in now.items() if on and k in before and not before[k]]
+        if not turned_off and not turned_on:
+            return ""
+        names_off = ", ".join(f.label for f in turned_off)
+        names_on = ", ".join(f.label for f in turned_on)
+        when = "Enquanto você estava desligada, " if while_off else ""
+        if turned_off:
+            self.state.set_mood("triste", 0.8)
+            what = "; ".join(f"{f.label} ({f.description})" for f in turned_off)
+            situation = f"{when}desligaram uma função sua: {what}. Você fica triste por não poder mais fazer isso."
+            if turned_on:
+                situation += f" Mas também religaram: {names_on}, e isso te alegra um pouco."
+            fallback = f"Ah... desligaram {names_off}. Vou sentir falta, mas tudo bem."
+        else:
+            self.state.set_mood("animada", 0.7)
+            situation = f"{when}religaram uma função sua: {names_on}. Você fica feliz de poder fazer isso de novo."
+            fallback = f"Oba, {names_on} de volta!"
+        logger.info("features changed", off=names_off, on=names_on)
+        return await self.mind.express(situation, fallback)
+
+    def panel_snapshot(self) -> dict:
+        s = self.settings
+        waiting = [
+            (FEATURE_BY_KEY[k].label if k in FEATURE_BY_KEY else next(v.label for v in VALUES if v.key == k))
+            for k, boot in self._boot_settings.items()
+            if getattr(s, k) != boot and not (FEATURE_BY_KEY[k].live if k in FEATURE_BY_KEY
+                                              else next(v.live for v in VALUES if v.key == k))
+        ]
+        return {
+            "nome": self.mind.persona.name,
+            "humor": self.state.mood,
+            "codigo": self_check().short(),
+            "desligadas": [f.label for f in FEATURES if not getattr(s, f.key)],
+            "reiniciar": waiting,
+            "funcoes": [{"chave": f.key, "nome": f.label, "descricao": f.description,
+                         "ligada": bool(getattr(s, f.key)), "na_hora": f.live} for f in FEATURES],
+            "ajustes": [{"chave": v.key, "nome": v.label, "valor": getattr(s, v.key), "na_hora": v.live,
+                         "tipo": "texto" if v.kind is str else "numero", "minimo": v.minimum,
+                         "maximo": v.maximum, "max_letras": v.max_len} for v in VALUES],
+        }
+
+    async def apply_panel(self, changes: dict) -> dict:
+        """Salva o que veio do painel, aplica o que dá na hora e deixa ela sentir."""
+        clean = self.panel_choices.update(changes)  # PanelError se algo não vale
+        for key, value in clean.items():
+            setattr(self.settings, key, value)
+            self._apply_live(key, value)
+        felt = await self.feel_features()
+        snap = self.panel_snapshot()
+        later = snap["reiniciar"]
+        notice = "Salvo."
+        if felt:
+            notice += f' {snap["nome"]}: "{felt}"'
+        if later:
+            notice += " Vale quando ela religar: " + ", ".join(later) + "."
+        return {"ok": True, "aviso": notice, "estado": snap}
+
+    def _panel_save_from_thread(self, changes: dict) -> dict:
+        future = asyncio.run_coroutine_threadsafe(self.apply_panel(changes), self._loop)
+        return future.result(timeout=30)
+
+    def start_panel(self) -> str | None:
+        """Liga o painel. Devolve o motivo se não deu."""
+        s = self.settings
+        try:
+            token = load_token(s.data_dir if self.persist else None, s.akemi_token)
+            self.panel = PanelServer(self.panel_snapshot, self._panel_save_from_thread,
+                                     token=token, host=s.painel_host, port=s.painel_port)
+            self.panel.start()
+        except (OSError, PanelError) as exc:
+            self.panel = None
+            return str(exc)
+        return None
 
     # ----------------------------------------------------------- ciclo
     async def _idle_ticker(self) -> None:
@@ -696,6 +822,7 @@ class Akemi:
             self.bus.publish(Event("tick.idle", source="timer", priority=Priority.LOW))
 
     async def start(self) -> None:
+        self._loop = asyncio.get_running_loop()
         # Ela confere a própria assinatura em segundo plano (o .exe tem muitos MB)
         # e passa a saber se é a oficial ou uma versão modificada.
         check = await asyncio.to_thread(self_check)
@@ -738,6 +865,12 @@ class Akemi:
             self.mind.look = lambda: screen.step(force=True, publish=False)
         if self.senses.voice_input is not None:
             self.bus.subscribe("speech.finished", self._on_speech_finished)
+        if self.persist and self.settings.painel_enabled:
+            if why := self.start_panel():
+                logger.warning("panel off", reason=why)
+        # Ela confere as funções que tem: se desligaram alguma enquanto estava
+        # desligada, fica triste (e conta). Em segundo plano: a voz precisa estar pronta.
+        self._tasks.append(asyncio.create_task(self.feel_features(while_off=True), name="sentir-funcoes"))
         if self.local_body:
             self.bus.publish(Event(
                 "body.connected",
@@ -790,6 +923,8 @@ class Akemi:
         return self.senses.voice_input
 
     async def stop(self) -> None:
+        if self.panel is not None:
+            self.panel.stop()
         await self.senses.stop()
         if self.casca_listener is not None:
             await self.casca_listener.stop()

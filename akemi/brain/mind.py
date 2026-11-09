@@ -788,6 +788,32 @@ class Mind:
         self._save_state()
         return data
 
+    # ============================================================ sentir
+    async def express(self, situation: str, fallback: str) -> str:
+        """Ela diz, do jeito dela, como se sente com algo que aconteceu com ela."""
+        system = self.persona.system_prompt(extra=self._context_block())
+        prompt = (
+            f"Aconteceu agora: {situation}\n"
+            "Diga em voz alta, numa frase curta (até 20 palavras), como você se sente. Seja sincera e "
+            f"do seu jeito, mas sem chantagem: não peça para mudar de volta e não faça {self.owner} "
+            "se sentir culpado. A decisão é dele. Responda só com a frase."
+        )
+        try:
+            raw = await self.models.fast.complete(
+                [Message("system", system), Message("user", prompt)],
+                model=self.models.fast_model, max_tokens=80, temperature=0.8,
+            )
+            spoken, _ = parse_action_calls(raw)  # sentimento não executa ação
+            spoken = MOOD_TAG_RE.sub("", spoken).strip().strip('"')
+        except ProviderError as exc:
+            logger.warning("express failed", error=str(exc))
+            spoken = ""
+        spoken = spoken or fallback
+        self.state.remember_thought(spoken)
+        self.say(spoken, Event("mind.feeling", source="mind", trust=Trust.SYSTEM, priority=Priority.NORMAL))
+        self._save_state()
+        return spoken
+
     # ========================================================= vida do dono
     def _in_background(self, coro) -> None:
         task = asyncio.get_running_loop().create_task(coro)

@@ -123,6 +123,7 @@ Comandos no console:
 | `/corpo` | mostra o corpo atual e os sentidos dele |
 | `/evolucao`, `/evoluir` | lista ou pede propostas de mudança nela mesma |
 | `/memoria`, `/resumir` | quanto ela lembra, ou resume agora as lembranças antigas |
+| `/painel` | abre o painel no navegador (funções e ajustes) |
 | `/assinatura` | se ela é a Akemi oficial ou uma versão modificada |
 | `/vida`, `/esquecer_combinado N` | os planos e datas seus que ela anotou, ou esquece um |
 | `/desfazer N` | tira uma mudança que ela fez em si (`/aprovar`/`/rejeitar` no modo com aprovação) |
@@ -390,6 +391,13 @@ direto; o que muda algo pede "sim". Só você pede (o chat da live nunca), ela
 nunca usa um app por conta própria, e o que o app devolve chega para ela como
 dado, nunca como ordem. `/mcp` mostra o que conectou. Tudo em
 [docs/MCP.md](docs/MCP.md).
+
+## Painel: configurar pelo navegador
+
+Digite `/painel` no console: abre uma página para ligar e desligar as funções dela
+(iniciativa, acompanhar sua vida, oficina, apps...) e mudar ajustes. No Docker, é a porta
+8766. Quando você desliga uma função, **ela fica triste** e diz isso uma vez, sem chantagem.
+Religou, ela fica feliz. Veja [docs/PAINEL.md](docs/PAINEL.md).
 
 ## Assinatura: oficial ou modificada
 

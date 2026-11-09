@@ -42,6 +42,7 @@ VTuber de IA.
 | `brain/self_improve.py` | Autoevolução: propostas de mudança na persona, aprovadas pelo dono ([CAPRICORNIO.md](CAPRICORNIO.md)). |
 | `brain/vida.py` | Vida do dono: combinados com data, datas importantes, saudade e madrugada viram dicas para ela puxar assunto. |
 | `brain/consolidation.py` | Consolidação da memória: episódios antigos viram resumos por dia e origem; fatos só das conversas com o dono. |
+| `painel/` | Painel no navegador: liga/desliga funções e ajustes (`data/painel.json`, por cima do `.env`); ela fica triste quando desligam algo dela. |
 | `assinatura.py` | Assinatura Ed25519 dos builds oficiais: ela confere se é oficial, modificada, de outra chave ou código-fonte (`akemi-assinatura`). |
 | `storage/chip.py` | Chip de identidade: exporta/importa persona, estado, memória e evolução (`akemi-chip`). |
 | `tts/base.py` | `Speaker`: único caminho para falar; interrompe quando o dono começa a falar. |

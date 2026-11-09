@@ -24,6 +24,7 @@ MOOD_ACCENT = {
     "irritadinha": "#ff5a3c",
     "sonolenta": "#b48cff",
     "orgulhosa": "#ffc93c",
+    "triste": "#6f8fc8",
 }
 # Olhos e boca de cada humor quando ela não está fazendo outra coisa.
 MOOD_FACE = {
@@ -35,6 +36,7 @@ MOOD_FACE = {
     "irritadinha": ("bravos", "bico"),
     "sonolenta": ("sonolentos", "fechada"),
     "orgulhosa": ("felizes", "sorriso"),
+    "triste": ("entediados", "fechada"),
 }
 PAT_REVERSALS = 4  # vai e volta do mouse em cima dela para contar como carinho
 PAT_WINDOW_S = 1.6
