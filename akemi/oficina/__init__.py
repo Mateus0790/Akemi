@@ -50,6 +50,10 @@ MAX_READ_FILES = 6
 MAX_FILE_CHARS = 20_000
 MAX_CONTEXT_CHARS = 60_000
 SECRETISH_ENV = re.compile(r"(TOKEN|KEY|SECRET|PASSW|GITHUB|NVIDIA|OPENAI|ANTHROPIC|CHIP)", re.I)
+# Configuração do git passada pelo ambiente (GIT_CONFIG_COUNT/KEY_n/VALUE_n e o
+# GIT_CONFIG_PARAMETERS do "git -c"). Sai inteira: tirar só as KEY_n deixa o git
+# quebrado (sai com 128) e os VALUE_n podem levar um cabeçalho de autenticação.
+GIT_ENV_CONFIG = re.compile(r"^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+|PARAMETERS)$", re.I)
 
 FORMAT_HELP = """Responda SOMENTE neste formato, sem markdown em volta:
 
@@ -101,7 +105,10 @@ def slugify(text: str, limit: int = 32) -> str:
 
 def scrubbed_env() -> dict[str, str]:
     """Ambiente para rodar os testes: sem as suas chaves e tokens."""
-    env = {k: v for k, v in os.environ.items() if not SECRETISH_ENV.search(k)}
+    env = {
+        k: v for k, v in os.environ.items()
+        if not SECRETISH_ENV.search(k) and not GIT_ENV_CONFIG.match(k)
+    }
     env["AKEMI_OFICINA"] = "1"
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
