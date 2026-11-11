@@ -97,7 +97,7 @@ class AvatarWindow:
             return
         self.root = root
         windows = sys.platform == "win32"
-        bg = KEY if windows else "#1f1d2b"
+        bg = KEY if windows else "#1c1033"
         root.title("Akemi")
         root.overrideredirect(True)
         root.attributes("-topmost", True)

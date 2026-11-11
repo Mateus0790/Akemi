@@ -10,7 +10,7 @@ import 'notifier.dart';
 import 'settings.dart';
 import 'voice.dart';
 
-const Color akemiPink = Color(0xFFE0457B);
+const Color akemiPink = Color(0xFFFC3B7F);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

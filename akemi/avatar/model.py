@@ -16,13 +16,13 @@ from dataclasses import dataclass
 
 # Cor de destaque por humor (pontas do cabelo, detalhes do moletom, luz do chip).
 MOOD_ACCENT = {
-    "neutra": "#3fd4ff",
-    "animada": "#ff4fa3",
+    "neutra": "#42D9E8",
+    "animada": "#FC3B7F",
     "curiosa": "#7cff6b",
     "focada": "#4f8bff",
     "entediada": "#9a8fb5",
     "irritadinha": "#ff5a3c",
-    "sonolenta": "#b48cff",
+    "sonolenta": "#E9D5FF",
     "orgulhosa": "#ffc93c",
     "triste": "#6f8fc8",
 }

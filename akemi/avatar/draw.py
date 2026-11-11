@@ -1,7 +1,7 @@
 """Desenha a Akemi num canvas do Tk a partir de um :class:`~akemi.avatar.model.Look`.
 
-O visual é próprio da Akemi: cabelo índigo com as pontas na cor do humor, olhos
-ciano, moletom escuro e uma presilha em forma de chip (o chip de identidade do
+O visual é próprio da Akemi: cabelo roxo com as pontas na cor do humor, olhos
+ciano, moletom rosa e uma presilha em forma de chip (o chip de identidade do
 Projeto Capricórnio). Tudo em formas simples, sem imagens.
 
 Skin: uma pasta com PNGs (``AVATAR_SKIN``) troca o desenho por imagens suas.
@@ -19,22 +19,33 @@ from typing import Any
 
 from .model import Look
 
+# Paleta da Akemi: rosa vibrante (principal), roxo profundo (contraste),
+# azul-ciano (detalhes), lilás pastel (suavidade) e creme (partes neutras).
+PINK = "#FC3B7F"
+PURPLE = "#5420A8"
+CYAN = "#42D9E8"
+LILAC = "#E9D5FF"
+CREAM = "#FFF1E6"
+
 SKIN = "#f7dccb"
 SKIN_SHADE = "#eec2ac"
-HAIR = "#2b2452"
-HAIR_DARK = "#1d1838"
-HOODIE = "#23203a"
-HOODIE_DARK = "#18162a"
-LEGS = "#2f2946"
-SHOES = "#101018"
-IRIS = "#3fc8ff"
-PUPIL = "#173a6b"
-LINE = "#1b1526"
+HAIR = PURPLE
+HAIR_DARK = "#3a1578"
+HOODIE = PINK
+HOODIE_DARK = "#c92463"
+LEGS = "#2e1260"
+SHOES = CREAM
+IRIS = CYAN
+PUPIL = "#3a1578"
+LINE = "#24103f"
 MOUTH = "#8a2c3d"
-BLUSH = "#ff9fba"
-BUBBLE_BG = "#fbfaff"
-BUBBLE_TEXT = "#1b1830"
-CAPTION_BG = "#15131f"
+BLUSH = "#ff8fb5"
+CHIP = CREAM
+CHIP_PINS = LILAC
+BUBBLE_BG = CREAM
+BUBBLE_TEXT = "#24103f"
+CAPTION_BG = "#24103f"
+CAPTION_TEXT = LILAC
 SKIN_FRAMES = ("parado", "piscando", "falando", "feliz", "dormindo")
 
 # Tamanho do canvas em unidades (multiplicado pela escala).
@@ -166,14 +177,16 @@ class Painter:
             x = side * 9
             self.poly([(x - 5, -40), (x + 5, -40), (x + 5 + swing * side, -6), (x - 5 + swing * side, -6)],
                       dy, fill=LEGS, outline=LINE, width=1)
-            self.oval(x + swing * side, -4, 7, 4.5, dy, fill=SHOES, outline=SHOES)
+            self.oval(x + swing * side, -4, 7, 4.5, dy, fill=SHOES, outline=LINE)
         # barra do moletom
         self.poly([(-25, -66), (25, -66), (31, -36), (-31, -36)], dy, fill=HOODIE, outline=LINE, width=1)
-        self.line([(-30, -38), (30, -38)], dy, width=2.4, fill=a)
+        # faixa creme por baixo: o detalhe aparece mesmo quando o humor é rosa
+        self.line([(-30, -38), (30, -38)], dy, width=4.6, fill=CREAM)
+        self.line([(-30, -38), (30, -38)], dy, width=2.2, fill=a)
         # tronco
         self.poly([(-22, -94), (22, -94), (26, -64), (-26, -64)], dy, fill=HOODIE, outline=LINE, width=1)
         self.line([(0, -92), (0, -40)], dy, width=1.4, fill=HOODIE_DARK)
-        self.oval(0, -70, 4, 4, dy, fill=a, outline=a)  # o "led" do moletom
+        self.oval(0, -70, 4.2, 4.2, dy, fill=a, outline=CREAM, width=2)  # o "led" do moletom
         # braços e mãos
         for side in (-1, 1):
             self.poly([(side * 21, -92), (side * 31, -78), (side * 30, -54), (side * 23, -54), (side * 20, -78)],
@@ -212,9 +225,9 @@ class Painter:
         # presilha de chip, com a luz na cor do humor
         cx, cy = 26 + t, hy - 26
         self.poly([(cx - 7, cy - 4), (cx + 7, cy - 6), (cx + 8, cy + 2), (cx - 6, cy + 4)], dy,
-                  fill="#cfd6e6", outline=LINE, width=1)
+                  fill=CHIP, outline=LINE, width=1)
         for i in (-4, 0, 4):
-            self.line([(cx + i, cy + 4), (cx + i, cy + 7)], dy, width=1, fill="#8e98ad")
+            self.line([(cx + i, cy + 4), (cx + i, cy + 7)], dy, width=1, fill=CHIP_PINS)
         self.oval(cx + 1, cy - 1, 2.2, 2.2, dy, fill=a, outline=a)
 
     def _eyes(self, look: Look, dy: float, hy: float) -> None:
@@ -286,7 +299,7 @@ class Painter:
             shift = rng.uniform(-14, 14) * self.s * look.glitch
             x0 = self.cx - 50 * self.s + shift
             x1 = self.cx + 50 * self.s + shift
-            color = rng.choice((look.accent, "#00f0ff", "#ff2bd6", self.bg))
+            color = rng.choice((look.accent, CYAN, PINK, self.bg))
             self.c.create_rectangle(x0, y, x1, y + h, fill=color, outline="")
 
     def _caption(self, look: Look, above: float) -> float:
@@ -297,7 +310,7 @@ class Painter:
         h = 18 * self.s
         x0 = self.cx - w / 2
         self.round_rect(x0, y - h, x0 + w, y, 8 * self.s, fill=CAPTION_BG, outline=look.accent, width=1)
-        self.c.create_text(self.cx, y - h / 2, text=text, fill="#f2f0ff", font=self.small_font, width=w - 8)
+        self.c.create_text(self.cx, y - h / 2, text=text, fill=CAPTION_TEXT, font=self.small_font, width=w - 8)
         return above - 22
 
     def _bubble(self, look: Look, above: float) -> None:

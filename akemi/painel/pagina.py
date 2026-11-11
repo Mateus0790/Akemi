@@ -9,14 +9,17 @@ PAGE = r"""<!doctype html>
 <title>Painel da Akemi</title>
 <style>
   :root {
-    --bg: #f6f5fb; --card: #ffffff; --text: #1d1b26; --muted: #625e73; --line: #e3e0ee;
-    --accent: #d6337f; --accent-soft: #fbe3ef; --on: #2f9e6b; --warn: #b4540a; --sad: #4f6fa8;
+    /* Paleta da Akemi: rosa #FC3B7F, roxo #5420A8, ciano #42D9E8, lilás #E9D5FF, creme #FFF1E6. */
+    --bg: #fff1e6; --card: #ffffff; --text: #24103f; --muted: #6b5a85; --line: #e9d5ff;
+    --accent: #fc3b7f; --on-accent: #fff1e6; --btn: #5420a8; --btn-text: #ffffff; --focus: #5420a8;
+    --on: #2f9e6b; --warn: #b4540a; --sad: #4f6fa8;
     --shadow: 0 1px 2px rgba(20, 16, 40, .06), 0 4px 16px rgba(20, 16, 40, .05);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #13121a; --card: #1c1b25; --text: #ecebf3; --muted: #a29fb3; --line: #2e2c3b;
-      --accent: #ff5fa8; --accent-soft: #3a2030; --on: #4cc58d; --warn: #f0a050; --sad: #8aa7e0;
+      --bg: #160b2b; --card: #20123d; --text: #fff1e6; --muted: #b9a8d6; --line: #3a2563;
+      --btn: #fc3b7f; --btn-text: #1d0b3a; --focus: #42d9e8;
+      --on: #4cc58d; --warn: #f0a050; --sad: #8aa7e0;
       --shadow: none;
     }
   }
@@ -29,7 +32,7 @@ PAGE = r"""<!doctype html>
   header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
   .face {
     width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center;
-    background: var(--accent-soft); color: var(--accent); font-size: 26px; transition: background .3s, color .3s;
+    background: var(--accent); color: var(--on-accent); font-size: 26px; transition: background .3s, color .3s;
   }
   .face.triste { background: color-mix(in srgb, var(--sad) 18%, transparent); color: var(--sad); }
   h1 { font-size: 22px; margin: 0; }
@@ -56,7 +59,7 @@ PAGE = r"""<!doctype html>
   }
   .switch input:checked + span { background: var(--on); }
   .switch input:checked + span::after { transform: translateX(20px); }
-  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
   input[type=text], input[type=number] {
     width: 140px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--bg); color: var(--text); font: inherit;
@@ -64,7 +67,7 @@ PAGE = r"""<!doctype html>
   input[type=text] { width: 180px; }
   button {
     font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 10px 16px;
-    background: var(--accent); color: #fff; cursor: pointer;
+    background: var(--btn); color: var(--btn-text); cursor: pointer;
   }
   button:disabled { opacity: .5; cursor: default; }
   .actions { display: flex; justify-content: flex-end; padding: 12px 0 14px; border-top: 1px solid var(--line); }
