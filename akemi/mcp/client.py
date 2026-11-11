@@ -168,7 +168,9 @@ class StdioConnection(Connection):
         return found
 
     async def start(self) -> None:
-        env = {**os.environ, **self.env}
+        # O MCP fala UTF-8. Servidores em Python no Windows usariam a página de código
+        # do sistema (cp1252) no stdio sem isto; quem configurou o servidor ainda manda.
+        env = {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", **os.environ, **self.env}
         kwargs: dict[str, Any] = {}
         if sys.platform == "win32":  # sem janela de console piscando para cada servidor
             import subprocess
@@ -210,6 +212,13 @@ class StdioConnection(Connection):
                     break
                 try:
                     msg = json.loads(line)
+                except UnicodeDecodeError:
+                    # Servidor que não escreve UTF-8: troca os bytes ruins e segue.
+                    try:
+                        msg = json.loads(line.decode("utf-8", "replace"))
+                    except ValueError:
+                        logger.debug("mcp non-json line", line=line[:200])
+                        continue
                 except ValueError:
                     logger.debug("mcp non-json line", line=line[:200])
                     continue
