@@ -61,8 +61,8 @@ aponte `AVATAR_SKIN` para ela. Precisa de `parado.png`; `piscando.png`,
 (`pip install -e ".[avatar]"`), as imagens são redimensionadas e a borda fica
 limpa. Use só arte que você tem direito de usar.
 
-O visual oficial da Akemi (estilo anime, na paleta rosa/roxo/ciano/lilás/creme)
-já vem pronto em `assets/akemi`: é só usar `AVATAR_SKIN=assets/akemi`. Veja
+A aparência base da Akemi (estilo VTuber, na paleta rosa/roxo/ciano/lilás/creme)
+já vem pronta em `assets/akemi`: é só usar `AVATAR_SKIN=assets/akemi`. Veja
 `assets/akemi/README.md`.
 
 Requisitos: o `tkinter`, que vem com o Python do python.org no Windows. A
