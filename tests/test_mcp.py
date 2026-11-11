@@ -11,7 +11,7 @@ import pytest
 from akemi.actions.registry import ActionCall, ActionRegistry, Tier
 from akemi.core.events import Trust
 from akemi.mcp import MCPHub, parse_config, parse_paths
-from akemi.mcp.client import HttpConnection, MCPError, MCPSession, iter_sse, result_to_text
+from akemi.mcp.client import HttpConnection, StdioConnection, MCPError, MCPSession, iter_sse, result_to_text
 from akemi.mcp.hub import ServerConfig, describe_params, load_config
 
 FAKE_SERVER = str(Path(__file__).parent / "fixtures" / "fake_mcp_server.py")
@@ -37,6 +37,29 @@ async def started_hub(registry=None, **kw):
 
 
 # ------------------------------------------------------------------ stdio
+LATIN1_SERVER = (
+    "import sys, json\n"
+    "for line in sys.stdin.buffer:\n"
+    "    rid = json.loads(line)['id']\n"
+    "    out = '{\"jsonrpc\": \"2.0\", \"id\": %d, \"result\": {\"texto\": \"Sempre d\\u00e1 erro.\"}}\\n' % rid\n"
+    "    sys.stdout.buffer.write(out.encode('cp1252'))\n"
+    "    sys.stdout.buffer.flush()\n"
+)
+
+
+@pytest.mark.asyncio
+async def test_stdio_survives_server_that_does_not_write_utf8():
+    # No Windows um servidor em Python escreve na página de código do sistema: a resposta
+    # não pode virar "linha que não é JSON" e deixar o pedido pendurado até o timeout.
+    conn = StdioConnection(sys.executable, ["-c", LATIN1_SERVER])
+    await conn.start()
+    try:
+        result = await conn.request("tools/list", timeout=10)
+    finally:
+        await conn.close()
+    assert result["texto"].startswith("Sempre d") and result["texto"].endswith(" erro.")
+
+
 @pytest.mark.asyncio
 async def test_stdio_server_tools_become_actions():
     hub, reg = await started_hub()
