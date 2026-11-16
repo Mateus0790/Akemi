@@ -194,6 +194,9 @@ class Mind:
         # Vida do dono: combinados, datas importantes, saudade, madrugada (ver vida.py).
         self.vida: Vida | None = None
         self._background: set[asyncio.Task] = set()
+        # Busca por significado na memória (ver akemi/storage/embeddings.py); None = só palavra.
+        self.embedder = None
+        self.embed_query_timeout_s = 2.0  # não segura a resposta esperando a busca
 
     def register(self) -> None:
         self.bus.subscribe("owner.message", self.on_owner_message)
@@ -296,13 +299,29 @@ class Mind:
                 logger.warning("could not save state", error=str(exc))
 
     # ============================================================ contexto
-    def _context_block(self, query: str = "", include_actions: bool = False, extra_hint: str = "") -> str:
+    async def _embed_query(self, text: str):
+        """Vetor da pergunta para a busca por significado (``None`` se não der, rápido)."""
+        if self.embedder is None or not text.strip():
+            return None
+        try:
+            [vec] = await asyncio.wait_for(
+                self.embedder.embed([text], purpose="query"), self.embed_query_timeout_s
+            )
+            return vec
+        except Exception as exc:  # sem vetor, a busca por palavra resolve
+            logger.debug("query embedding failed", error=str(exc))
+            return None
+
+    def _context_block(
+        self, query: str = "", include_actions: bool = False, extra_hint: str = "", query_vec=None
+    ) -> str:
         parts = [f"Agora são {time.strftime('%H:%M')}.", self.state.describe()]
-        facts = self.memory.facts(15)
+        model = self.embedder.model if self.embedder is not None and query_vec is not None else ""
+        facts = self.memory.facts_for(query, 15, query_vec=query_vec, model=model)
         if facts:
             parts.append("Coisas que você sabe:\n" + "\n".join(f"- {f}" for f in facts))
         if query:
-            recalls = self.memory.recall(query, limit=3, exclude_recent_s=120)
+            recalls = self.memory.recall(query, limit=3, exclude_recent_s=120, query_vec=query_vec, model=model)
             if recalls:
                 parts.append(
                     "Lembranças relacionadas:\n"
@@ -370,7 +389,9 @@ class Mind:
                     action = self.actions.get(pending.call.name)
                     if result and result.status == "executed" and action and action.summarize:
                         # Ferramenta de app que pediu "sim": ela conta o resultado.
-                        system = self.persona.system_prompt(extra=self._context_block(text))
+                        system = self.persona.system_prompt(
+                            extra=self._context_block(text, query_vec=await self._embed_query(text))
+                        )
                         told = [(pending.call, str(result.value or "feito"))]
                         summary = await self._tell_results(
                             [Message("system", system), *self.history], told, decision.route, event,
@@ -414,8 +435,9 @@ class Mind:
                 return
 
             life_hint, life_keys = self.vida.hints(reply=True) if self.vida is not None else ("", [])
+            query_vec = await self._embed_query(text)
             system = self.persona.system_prompt(
-                extra=self._context_block(text, include_actions=True, extra_hint=life_hint)
+                extra=self._context_block(text, include_actions=True, extra_hint=life_hint, query_vec=query_vec)
             )
             messages = [Message("system", system), *self.history, Message("user", text)]
             logger.info("owner message", route=decision.route.value)

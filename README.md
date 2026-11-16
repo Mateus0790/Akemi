@@ -27,6 +27,9 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Estado interno persistente com humor que muda e decai
 - Pensamento ocioso: ela reflete sozinha e decide se fala algo
 - Memória SQLite (conversas + fatos) com busca por relevância, que prefere o mais recente entre lembranças parecidas
+- **Busca por significado** (opcional, `MEMORY_EMBED_PROVIDER`): ela lembra do "Thor no veterinário" quando
+  você pergunta do "cachorro". Funciona offline com Ollama (`nomic-embed-text`) e cai na busca por palavra se falhar.
+  Os fatos também são escolhidos pelo assunto da conversa, não só os 15 mais novos
 - **Memória que se organiza sozinha**: de tempos em tempos, o que tem mais de 7 dias vira resumos curtos
   (e fatos novos sobre você, tirados só das suas conversas com ela). Se o cérebro falhar, nada é apagado
 - **Ela acompanha a sua vida**: conte um plano com data ("sexta tenho prova", "amanhã vou terminar o

@@ -36,6 +36,7 @@ from akemi.core.pause import PauseSwitch
 from akemi.core.senses import Senses
 from akemi.live.chat import ChatBatcher, ChatMessage
 from akemi.safety.moderation import Moderator
+from akemi.storage.embeddings import Embedder, build_embedder
 from akemi.storage.memory import Memory
 from akemi.tts.base import ConsoleTTS, Speaker, TTSEngine
 
@@ -183,6 +184,7 @@ class Akemi:
         deep: LLMProvider | None = None,
         tts: TTSEngine | None = None,
         memory: Memory | None = None,
+        embedder: Embedder | None = None,
         persist: bool = True,
         desktop_actions: bool = True,
     ) -> None:
@@ -200,6 +202,7 @@ class Akemi:
         self.state_path = data / "state.json" if persist else None
         self.state = InnerState.load(self.state_path) if self.state_path else InnerState()
         self.memory = memory or Memory(data / "memory.sqlite3" if persist else ":memory:")
+        self.embedder = embedder if embedder is not None else build_embedder(settings)
         self.moderator = Moderator.from_file(data / "blocklist.txt")
 
         if fast is None:
@@ -274,6 +277,7 @@ class Akemi:
             health=self.health,
             initiative=settings.initiative_enabled,
         )
+        self.mind.embedder = self.embedder
         # Pedidos claros que ela entende sem o modelo. Lembrete com horário primeiro:
         # "me lembra amanhã de analisar a pasta X" é lembrete, não análise agora.
         parsers = [self.reminders.direct_request]
@@ -753,6 +757,33 @@ class Akemi:
             moderator=self.moderator,
         )
 
+    async def index_memory(self, batch: int = 32, max_batches: int = 20) -> int:
+        """Calcula os vetores do que ainda não tem (busca por significado). Devolve quantos."""
+        if self.embedder is None:
+            return 0
+        done = 0
+        for _ in range(max_batches):
+            todo = self.memory.unembedded(self.embedder.model, batch)
+            if not todo:
+                break
+            vectors = await self.embedder.embed([t for _, _, t in todo], purpose="passage")
+            done += self.memory.store_vectors(
+                self.embedder.model, [(o, r, t, v) for (o, r, t), v in zip(todo, vectors)]
+            )
+            if len(todo) < batch:
+                break
+        if done:
+            logger.info("memory indexed", vectors=done)
+        return done
+
+    async def _embed_ticker(self) -> None:
+        while True:
+            try:
+                await self.index_memory()
+            except Exception as exc:  # sem embeddings ela continua achando por palavra
+                logger.warning("memory indexing failed", error=str(exc))
+            await asyncio.sleep(self.settings.memory_embed_interval_s)
+
     def describe_memory(self) -> str:
         st = self.memory.stats()
         oldest = (time.strftime("%d/%m/%Y", time.localtime(st["mais_antigo"]))
@@ -761,7 +792,10 @@ class Akemi:
         return (
             f"  {st['episodios']} lembranças inteiras e {st['resumos']} resumos ({kinds})\n"
             f"  {st['fatos']} fatos guardados | mais antiga: {oldest}\n"
-            f"  resume o que tem mais de {self.settings.memory_keep_days:g} dias"
+            f"  resume o que tem mais de {self.settings.memory_keep_days:g} dias\n"
+            + (f"  busca por significado: {self.embedder.name}/{self.embedder.model}"
+               f" ({st['com_vetor']} itens indexados)"
+               if self.embedder is not None else "  busca por significado: desligada (MEMORY_EMBED_PROVIDER)")
         )
 
     async def _memory_ticker(self) -> None:
@@ -926,6 +960,8 @@ class Akemi:
             self._tasks.append(self._supervised("evolution", self._evolution_ticker, "rotina de evolução"))
         if self.persist and self.settings.memory_consolidate_interval_s > 0:
             self._tasks.append(self._supervised("memory", self._memory_ticker, "rotina da memória"))
+        if self.embedder is not None and self.settings.memory_embed_interval_s > 0:
+            self._tasks.append(self._supervised("embeddings", self._embed_ticker, "índice da memória"))
         self._tasks.append(asyncio.create_task(self._watchdog(), name="watchdog"))
         if self.mcp is not None:  # conecta em segundo plano: o npx pode demorar
             self._tasks.append(self._supervised("mcp", self.mcp.run, "conexão com os apps"))
