@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     memory_consolidate_enabled: bool = True  # liga/desliga pelo painel
     memory_consolidate_interval_s: float = 21600.0  # 0 = só com /resumir
     memory_keep_days: float = 7.0  # episódios mais novos que isso ficam inteiros
+    # Busca por significado (embeddings). Vazio = só por palavra, como antes.
+    # "ollama" (nomic-embed-text, offline), "nim", "openai" ou "llamacpp" (--embeddings).
+    memory_embed_provider: Literal["", "nim", "openai", "ollama", "llamacpp"] = ""
+    memory_embed_model: str = ""  # vazio = o padrão do provedor
+    memory_embed_timeout_s: float = 15.0
+    memory_embed_interval_s: float = 60.0  # de quanto em quanto tempo indexa o que é novo
     # Vida do dono: ela anota planos e datas que você conta e puxa assunto depois.
     vida_enabled: bool = True
     vida_absence_hours: float = 20.0  # depois disso sem falar com ela, ela comenta que sentiu falta
