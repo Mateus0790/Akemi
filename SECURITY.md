@@ -2,7 +2,12 @@
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities by opening an issue with the label "security" or by emailing security@example.com (if applicable). We will respond promptly and work with you to address the issue.
+Please report security vulnerabilities by opening a private security advisory on GitHub:
+1. Go to the repository's Security tab
+2. Click "Report a vulnerability"
+3. Fill in the details
+
+Alternatively, open an issue with the label "security" for non-sensitive bugs. We will respond promptly and work with you to address the issue.
 
 ## Supported Versions
 

@@ -14,6 +14,23 @@ Thank you for considering contributing to Akemi! Please read this document to un
 
 We follow PEP 8 for Python code. Please use tools like `black` and `flake8` to maintain consistency.
 
+### Linting e Formatação
+
+Antes de enviar um PR, rode:
+
+```bash
+# Formatação automática
+black akemi tests
+
+# Verificar estilo
+flake8 akemi tests
+
+# Type checking (opcional mas recomendado)
+mypy akemi
+```
+
+A configuração está em `pyproject.toml` e `.flake8`.
+
 ## Reporting Issues
 
 Please use the GitHub issue tracker to report bugs or suggest features. When reporting a bug, include:

@@ -18,6 +18,12 @@ services:
     volumes:
       # Memória, humor e estado. Sobrevive a atualizações do container.
       - /DATA/AppData/akemi:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8765/saude || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       TZ: America/Sao_Paulo
       OWNER_NAME: Mateus
