@@ -1,5 +1,8 @@
 # Núcleo em Rust (opcional)
 
+> O `rust-core/` também tem o [painel desktop](PAINEL_RUST.md) (`akemi-painel`), que
+> configura tudo da Akemi numa janela. Esta página é sobre o áudio.
+
 O `rust-core/` tem uma versão em Rust do caminho quente do áudio: o que roda a
 cada callback do PortAudio (downmix → resample para 16 kHz → quadros de 20 ms)
 e o VAD. É **opcional**: se o módulo `akemi_audio_rs` estiver instalado, a

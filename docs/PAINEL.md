@@ -2,6 +2,10 @@
 
 Uma página no navegador para configurar a Akemi e ligar ou desligar funções dela.
 
+> Para configurar **tudo** (modelos, vozes, pastas, chaves, personalidade) numa janela,
+> use o [painel desktop em Rust](PAINEL_RUST.md). Este aqui muda algumas coisas na hora,
+> com ela ligada.
+
 - **No PC:** digite `/painel` no console. Ele mostra o link e abre o navegador.
   O link tem a senha do painel: não mande para ninguém. O endereço é
   `http://127.0.0.1:8766`, e a senha fica em `data/painel.token`.

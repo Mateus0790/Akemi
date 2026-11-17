@@ -1,0 +1,39 @@
+name: Painel (Rust)
+
+# Testa o painel desktop (rust-core/akemi-painel) e gera o akemi-painel.exe.
+# Baixe em: Actions → "Painel (Rust)" → a execução mais recente → Artifacts →
+# akemi-painel-windows. Coloque o .exe na pasta da Akemi e abra (docs/PAINEL_RUST.md).
+on:
+  push:
+    paths: ["rust-core/akemi-painel/**", "rust-core/Cargo.*", "akemi/core/config.py",
+            "akemi/brain/*.yaml", ".github/workflows/painel.yml"]
+  pull_request:
+    paths: ["rust-core/akemi-painel/**", "rust-core/Cargo.*", "akemi/core/config.py",
+            "akemi/brain/*.yaml", ".github/workflows/painel.yml"]
+  workflow_dispatch:
+
+jobs:
+  painel:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Os testes conferem que toda configuração do config.py está no painel.
+      - name: cargo test
+        run: cargo test --manifest-path rust-core/Cargo.toml -p akemi-painel
+
+      - name: cargo clippy
+        run: cargo clippy --manifest-path rust-core/Cargo.toml -p akemi-painel --all-targets -- -D warnings
+
+      - name: Gerar o akemi-painel
+        run: cargo build --manifest-path rust-core/Cargo.toml -p akemi-painel --release
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'windows-latest'
+        with:
+          name: akemi-painel-windows
+          path: rust-core/target/release/akemi-painel.exe
