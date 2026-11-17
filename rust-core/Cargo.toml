@@ -1,9 +1,10 @@
-# Núcleo em Rust da Akemi (opcional). Cada crate vira um módulo Python via
+# Rust da Akemi: akemi-audio (núcleo de áudio opcional), akemi-painel (painel
+# desktop) e akemi-celular (app do Android). O akemi-audio vira um módulo Python via
 # PyO3/maturin; a Akemi usa o módulo se estiver instalado e cai no Python se
 # não estiver. Veja docs/RUST.md.
 [workspace]
 resolver = "2"
-members = ["akemi-audio", "akemi-painel"]
+members = ["akemi-audio", "akemi-painel", "akemi-celular"]
 
 [profile.release]
 lto = "thin"

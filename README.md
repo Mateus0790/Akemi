@@ -64,7 +64,8 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Oficina** ([docs/OFICINA.md](docs/OFICINA.md)): ela muda o próprio código e abre um
   PR para você revisar ("abre um PR para ...", `/pr`)
 - **App do celular** ([docs/CELULAR.md](docs/CELULAR.md)): a mesma Akemi no
-  Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`)
+  Android, ao lado do PC. Ela responde onde você falou por último (`akemi --celular`).
+  Tem também uma versão em Rust ([docs/CELULAR_RUST.md](docs/CELULAR_RUST.md))
 - **Secretária nos chats** ([docs/SECRETARIA.md](docs/SECRETARIA.md)): "tô em reunião até as 15h"
   e ela responde quem te manda mensagem no WhatsApp, Telegram, Discord e Teams dizendo que você está ocupado,
   conta só o que você deixou ("pode dizer que eu chego às 19h"), anota os recados e te avisa
