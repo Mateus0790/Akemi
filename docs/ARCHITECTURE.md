@@ -35,7 +35,7 @@ VTuber de IA.
 | `live/` | Chat da live: agrupamento, seleção e limite de respostas (sem plataforma ligada). |
 | `safety/moderation.py` | Filtro de entrada (chat) e de saída (tudo que vira voz). |
 | `storage/memory.py` | Memória episódica (SQLite FTS5) + fatos. |
-| `stt/` | Segmentação de fala pelo VAD + Whisper. |
+| `stt/` | Segmentação de fala pelo VAD + Whisper. Um Whisper só para mic e áudio do PC (`SharedTranscriber`): a voz do dono vai na frente, o áudio do PC tem limite de CPU ([DESEMPENHO.md](DESEMPENHO.md)). |
 | `audio/native.py` | Usa o núcleo de áudio em Rust (`rust-core/`, opcional) se estiver instalado; senão, Python. Mesmo resultado byte a byte ([RUST.md](RUST.md)). |
 | `vision/` | Tela: detecção de mudança, OCR e descrição por modelo de visão → `ambient.screen`. |
 | `core/senses.py` | Liga microfone, áudio do PC e tela a um barramento (usado no modo local e no corpo). |

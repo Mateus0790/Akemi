@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from typing import Any
 
 import httpx
@@ -146,11 +147,18 @@ class FishAudioTTS(TTSEngine):
         del pcm[:whole]
         return True
 
+    def _play_first(self, pcm: bytearray, played: bool, asked: float) -> bool:
+        """Toca; na primeira vez, loga quanto a nuvem levou até o primeiro som."""
+        if not played and len(pcm) >= 2:
+            logger.info("fish first audio", ms=round((time.monotonic() - asked) * 1000))
+        return self._play(pcm)
+
     def _speak_sync(self, text: str) -> None:
         self.load()
         with self._lock:
             self._cancel.clear()
             played = False
+            asked = time.monotonic()
             try:
                 with self._client.stream("POST", self.url, json=self.request_body(text),
                                          headers=self._headers()) as response:
@@ -163,9 +171,9 @@ class FishAudioTTS(TTSEngine):
                             return  # fechar o stream corta o download também
                         pending += data
                         if len(pending) >= self._block:
-                            played |= self._play(pending)
+                            played |= self._play_first(pending, played, asked)
                     if not self._cancel.is_set():
-                        played |= self._play(pending)
+                        played |= self._play_first(pending, played, asked)
             except httpx.HTTPError as exc:
                 if not played:
                     raise FishAudioError(f"sem conexão com o Fish Audio: {type(exc).__name__}: {exc}") from exc

@@ -47,7 +47,8 @@ class Speaker:
         self.bus = bus
         self.engine = engine
         self.moderator = moderator
-        self._queue: asyncio.Queue[tuple[str, Trust]] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[str, Trust, dict | None]] = asyncio.Queue()
+        self._timed_origin: object = None
         self._recent: deque[tuple[float, str]] = deque(maxlen=10)
         self._current: asyncio.Task | None = None
         self._task: asyncio.Task | None = None
@@ -65,7 +66,10 @@ class Speaker:
             return
         if verdict.reasons:
             logger.info("speech sanitized", reasons=verdict.reasons)
-        await self._queue.put((verdict.text, event.trust))
+        latency = event.payload.get("latency")
+        if latency is not None:
+            latency = {**latency, "origin_id": event.payload.get("origin_id")}
+        await self._queue.put((verdict.text, event.trust, latency))
 
     async def on_stop(self, event: Event | None = None) -> None:
         """Interrompe a fala atual e descarta a fila (o dono começou a falar)."""
@@ -77,7 +81,9 @@ class Speaker:
 
     async def run(self) -> None:
         while True:
-            text, trust = await self._queue.get()
+            text, trust, latency = await self._queue.get()
+            if latency is not None:
+                self._log_latency(latency)
             # speech.started/finished servem para o avatar (boca, expressão)
             # e para a Akemi não "ouvir a si mesma" no áudio do sistema/mic.
             self._recent.append((time.time(), text))
@@ -103,6 +109,25 @@ class Speaker:
                     source="speaker",
                 )
             )
+
+    def _log_latency(self, latency: dict) -> None:
+        """Uma linha por resposta à voz: onde foi parar o tempo entre você
+        parar de falar e ela começar a responder (docs/DESEMPENHO.md)."""
+        origin = latency.get("origin_id")
+        if origin is not None and origin == self._timed_origin:
+            return  # só a primeira frase de cada resposta
+        self._timed_origin = origin
+        silence = float(latency.get("end_silence_ms", 0))
+        since_heard = (time.monotonic() - float(latency["heard_at"])) * 1000
+        parts = {k: float(latency.get(k, 0)) for k in ("stt_queue_ms", "stt_ms", "voice_id_ms")}
+        brain = max(since_heard - sum(parts.values()), 0.0)
+        logger.info(
+            "voice reply latency",
+            total_ms=round(silence + since_heard),
+            end_silence_ms=round(silence),
+            **{k: round(v) for k, v in parts.items()},
+            brain_ms=round(brain),
+        )
 
     @property
     def recent_speech(self) -> list[tuple[float, str]]:

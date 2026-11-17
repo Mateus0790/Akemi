@@ -245,6 +245,11 @@ vai para a memória. Ela também ignora a própria voz vazando da caixa de som e
 as frases que o Whisper inventa no silêncio ("obrigado por assistir"). Mesmo
 assim, **com fone de ouvido funciona bem melhor**.
 
+Demorando para responder ou deixando o PC pesado? Cada resposta à voz mostra no
+terminal onde o tempo foi parar (`voice reply latency`), e a cada minuto aparece
+quanto o Whisper ocupou a CPU (`whisper load`). Como ler e o que ajustar
+(placa de vídeo, modelo menor, silêncio): [docs/DESEMPENHO.md](docs/DESEMPENHO.md).
+
 ## Visão
 
 ```powershell

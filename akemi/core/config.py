@@ -151,6 +151,8 @@ class Settings(BaseSettings):
     # --- Percepção ---
     vad_aggressiveness: int = Field(default=2, ge=0, le=3)
     system_audio_enabled: bool = False  # ouvir o áudio do PC (WASAPI loopback) e transcrever
+    # Fração máxima do tempo que o Whisper passa com o áudio do PC (o resto é seu)
+    system_audio_max_load: float = Field(default=0.25, gt=0.0, le=1.0)
     mic_enabled: bool = False  # ouvir você pelo microfone
     mic_device: str | None = None  # nome/índice; vazio = padrão do sistema
     # wake_word: só responde se ouvir o nome dela (ou logo depois de uma conversa)
@@ -163,6 +165,9 @@ class Settings(BaseSettings):
     voice_id_enabled: bool = True
     voice_model_path: Path = Path("data/voices/wespeaker_en_voxceleb_resnet34.onnx")
     whisper_model: str = "small"
+    whisper_device: Literal["auto", "cpu", "cuda"] = "auto"  # cuda = placa NVIDIA (bem mais rápido)
+    whisper_threads: int = Field(default=0, ge=0)  # 0 = padrão (4); menos = PC mais leve, Whisper mais lento
+    mic_end_silence_ms: int = Field(default=700, ge=200, le=3000)  # silêncio que encerra a sua fala
     stt_language: str = "pt"
 
     # --- Visão ---
