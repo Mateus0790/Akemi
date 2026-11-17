@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import sys
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import structlog
 
-from .process import FrameAssembler, StreamResampler, downmix_to_mono_int16
+from . import native
 from .ring_buffer import RingBuffer
-from .vad import vad_frame_bytes
 
 logger = structlog.get_logger()
 
@@ -47,8 +46,8 @@ class AudioCapture:
         self._callback: Optional[Callable[[bytes], None]] = None
         self._device_rate = sample_rate
         self._device_channels = 1
-        self._resampler: Optional[StreamResampler] = None
-        self._frames: Optional[FrameAssembler] = None
+        # Downmix + resample + quadros de 20 ms (Rust se instalado, senão Python).
+        self._pipeline: Optional[Any] = None
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
         pa = self._pyaudio
@@ -59,12 +58,10 @@ class AudioCapture:
             if not in_data:
                 return (None, continue_flag)
 
-            mono = downmix_to_mono_int16(in_data, self._device_channels)
-            if self._resampler is None or self._frames is None:
+            pipeline = self._pipeline
+            if pipeline is None:
                 return (None, continue_flag)
-            resampled = self._resampler.push(mono)
-            frames = self._frames.push(resampled.tobytes())
-            for frame in frames:
+            for frame in pipeline.push(bytes(in_data)):
                 self._ring_buffer.append(frame)
                 if self._callback is not None:
                     self._callback(frame)
@@ -117,9 +114,8 @@ class AudioCapture:
             loopback_device = self._resolve_loopback_device(self._audio)
             self._device_rate = int(loopback_device["defaultSampleRate"])
             self._device_channels = int(loopback_device["maxInputChannels"]) or 2
-            self._resampler = StreamResampler(self._device_rate, self.output_rate)
-            self._frames = FrameAssembler(
-                vad_frame_bytes(self.output_rate, VAD_FRAME_MS)
+            self._pipeline = native.make_pipeline(
+                self._device_rate, self._device_channels, self.output_rate, VAD_FRAME_MS
             )
 
             logger.info(
@@ -128,6 +124,7 @@ class AudioCapture:
                 device_sample_rate=self._device_rate,
                 device_channels=self._device_channels,
                 output_sample_rate=self.output_rate,
+                audio_core=native.BACKEND,
             )
 
             self._stream = self._audio.open(
@@ -154,10 +151,9 @@ class AudioCapture:
         self._stream = None
         self._audio = None
         self._pyaudio = None
-        self._resampler = None
-        if self._frames is not None:
-            self._frames.clear()
-            self._frames = None
+        if self._pipeline is not None:
+            self._pipeline.clear()
+            self._pipeline = None
         if stream is not None:
             try:
                 if stream.is_active():

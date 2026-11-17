@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Optional
 
 import structlog
-import webrtcvad
+
+from . import native
 
 logger = structlog.get_logger()
 
@@ -22,21 +23,34 @@ def vad_frame_bytes(sample_rate: int, duration_ms: int = 20) -> int:
 
 
 class VAD:
-    """Voice Activity Detection using webrtcvad."""
+    """Voice Activity Detection (WebRTC VAD).
+
+    Usa o ``akemi_audio_rs`` (Rust) se estiver instalado e o ``webrtcvad`` se
+    não estiver; os dois são o mesmo algoritmo e dão a mesma resposta.
+    """
 
     def __init__(self, aggressiveness: int = 2, sample_rate: int = 16000):
         if aggressiveness not in (0, 1, 2, 3):
             raise ValueError("aggressiveness must be an integer between 0 and 3")
         if sample_rate not in ALLOWED_RATES:
             raise ValueError(f"Sample rate must be one of {ALLOWED_RATES}")
-        self.vad = webrtcvad.Vad(aggressiveness)
+        self.vad = native.make_vad_engine(aggressiveness, sample_rate)
+        self.backend = native.BACKEND
         self.sample_rate = sample_rate
         self.aggressiveness = aggressiveness
+        self.frames = 0
+        self.speech_frames = 0
         logger.info(
             "VAD initialized",
             aggressiveness=aggressiveness,
             sample_rate=sample_rate,
+            backend=self.backend,
         )
+
+    @property
+    def speech_ratio(self) -> float:
+        """Fração dos quadros analisados que tinham voz."""
+        return self.speech_frames / self.frames if self.frames else 0.0
 
     def is_speech(self, frame: bytes, sample_rate: Optional[int] = None) -> bool:
         """Return True if *frame* is 10/20/30 ms of speech-like PCM16 mono."""
@@ -54,7 +68,10 @@ class VAD:
             )
             return False
         try:
-            return self.vad.is_speech(frame, rate)
+            speech = bool(self.vad.is_speech(frame, rate))
         except Exception as exc:
             logger.error("Error in VAD processing", error=str(exc))
             return False
+        self.frames += 1
+        self.speech_frames += speech
+        return speech

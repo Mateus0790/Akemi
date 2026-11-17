@@ -215,10 +215,13 @@ class Mind:
         if not text:
             return
         self.state.last_spoke_at = time.time()
+        payload = {"text": text, "origin": origin.kind, "origin_id": origin.id}
+        if "latency" in origin.payload:  # cronômetro da resposta à voz (o Speaker loga)
+            payload["latency"] = origin.payload["latency"]
         self.bus.publish(
             Event(
                 "speech.say",
-                {"text": text, "origin": origin.kind, "origin_id": origin.id},
+                payload,
                 source="mind",
                 trust=origin.trust,
                 priority=priority or origin.priority,

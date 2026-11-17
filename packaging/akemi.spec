@@ -32,6 +32,7 @@ OPTIONAL = [
     "faster_whisper", "ctranslate2", "av", "tokenizers",
     "onnxruntime", "piper", "kokoro_onnx", "espeakng_loader", "phonemizer",
     "sherpa_onnx", "_sounddevice_data", "pyaudiowpatch",
+    "akemi_audio_rs",  # núcleo de áudio em Rust (opcional, docs/RUST.md)
 ]
 for name in OPTIONAL:
     if importlib.util.find_spec(name) is None:

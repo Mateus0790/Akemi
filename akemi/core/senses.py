@@ -71,7 +71,10 @@ class Senses:
         if self._stt is None:
             from akemi.stt.transcriber import WhisperTranscriber
 
-            self._stt = WhisperTranscriber(self.settings.whisper_model, self.settings.stt_language)
+            s = self.settings
+            self._stt = WhisperTranscriber(
+                s.whisper_model, s.stt_language, device=s.whisper_device, cpu_threads=s.whisper_threads
+            )
         return self._stt
 
     def _frame_bridge(self, name: str, handler) -> Callable[[bytes], None]:
@@ -99,6 +102,10 @@ class Senses:
         self._tasks.append(asyncio.create_task(pump(), name=name))
         return on_frame
 
+    def _owner_talking(self) -> bool:
+        """Você está no meio de uma frase no microfone (o Whisper vai ser seu)."""
+        return self.voice_input is not None and self.voice_input.segmenter.in_speech
+
     def start_system_audio(self) -> None:
         if sys.platform != "win32":
             logger.warning("system audio capture only works on Windows; skipping")
@@ -109,8 +116,10 @@ class Senses:
 
         stt = self._transcriber()
         ambient = AmbientAudioInput(
-            self.bus, stt.transcribe, VAD(self.settings.vad_aggressiveness).is_speech,
+            self.bus, stt.transcribe_background, VAD(self.settings.vad_aggressiveness).is_speech,
             self.speech_state, self.pause,
+            owner_talking=self._owner_talking,
+            max_load=self.settings.system_audio_max_load,
         )
         self._audio_capture = AudioCapture()
         self._audio_capture.start(callback=self._frame_bridge("system-audio", ambient.feed))
@@ -141,6 +150,7 @@ class Senses:
             followup_window_s=s.followup_window_s,
             barge_in_rms=s.barge_in_rms,
             voice_id=self.voice_id,
+            end_silence_ms=s.mic_end_silence_ms,
         )
         self._mic = MicCapture(device)
         self._mic.start(self._frame_bridge("mic", self.voice_input.feed))

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "akemi-audio-rs"
+version = "0.1.0"
+description = "Caminho quente do áudio da Akemi em Rust (downmix, resample, frames de 20 ms e VAD)"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+module-name = "akemi_audio_rs"
+features = ["python"]
