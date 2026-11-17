@@ -30,7 +30,7 @@ ou troque no campo "Pasta da Akemi", no topo.
 | --- | --- |
 | Geral | seu nome, nome do corpo, chave do chip; um resumo e os avisos (chave faltando, voz sem modelo, pasta que não existe...) |
 | Modelos de IA | provedor (NIM, OpenAI, Ollama, llama.cpp, Anthropic), modelo rápido e profundo, cérebros reserva em ordem, chaves e endereços, temperatura |
-| Voz | voz principal e reserva; Fish Audio (chave, voz, modelo, velocidade, volume), Kokoro (49 vozes), Piper (os `.onnx` em `data/voices`) |
+| Voz | voz principal e reserva; Fish Audio (chave, voz, modelo, velocidade, volume), ElevenLabs (chave, voz, modelo, ajustes da voz, velocidade, idioma), Kokoro (49 vozes), Piper (os `.onnx` em `data/voices`) |
 | Ouvir | microfone, palavras que a chamam, reconhecer sua voz, áudio do PC, modelo e placa do Whisper, idioma |
 | Visão | tela, monitor, modelo e provedor de visão, OCR, janelas que ela nunca lê |
 | Pastas e arquivos | as pastas que ela pode ler (avisa se alguma não existe), se pode mandar arquivos para IA na nuvem |
