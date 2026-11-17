@@ -53,6 +53,10 @@ pub struct Core {
     pub paused: bool,
     pub akemi_name: String,
     pub last_error: String,
+    /// Modo "sozinha no celular": a IA direto, sem o núcleo.
+    pub local: bool,
+    /// Esperando a IA responder (só no modo sozinha).
+    pub thinking: bool,
     outbox: Vec<String>,
     say_queue: VecDeque<Say>,
     current: Option<Value>,
@@ -71,6 +75,8 @@ impl Default for Core {
             say_queue: VecDeque::new(),
             current: None,
             interrupted: HashSet::new(),
+            local: false,
+            thinking: false,
         }
     }
 }
@@ -219,6 +225,59 @@ impl Core {
     // ------------------------------------------------------------ conexão
     pub fn set_connecting(&mut self) {
         self.status = Status::Conectando;
+        self.local = false;
+        self.thinking = false;
+    }
+
+    // ------------------------------------------------------ modo sozinha
+    /// Liga o modo sozinha com a conversa que estava guardada no celular.
+    pub fn start_local(&mut self, items: Vec<ChatItem>) {
+        self.local = true;
+        self.thinking = false;
+        self.paused = false;
+        self.akemi_name = "Akemi".into();
+        self.last_error.clear();
+        self.items = items;
+        self.outbox.clear();
+        self.status = Status::Conectado;
+    }
+
+    /// O que você mandou e ainda não foi respondido (o modo sozinha não usa a rede).
+    pub fn take_local_messages(&mut self) -> usize {
+        let pending = self
+            .take_outbox()
+            .iter()
+            .filter(|raw| raw.contains(r#""type":"owner_message""#))
+            .count();
+        if pending > 0 {
+            self.thinking = true;
+        }
+        pending
+    }
+
+    /// A IA respondeu: entra no chat e na fila da voz.
+    pub fn local_reply(&mut self, text: &str) -> Vec<Effect> {
+        self.thinking = false;
+        self.add(ChatItem {
+            mine: false,
+            text: text.to_string(),
+            elsewhere: false,
+        });
+        self.say_queue.push_back(Say {
+            id: Value::Null,
+            text: text.to_string(),
+        });
+        vec![Effect::AkemiText(text.to_string())]
+    }
+
+    /// A IA não respondeu: avisa na conversa (sem falar em voz alta).
+    pub fn local_error(&mut self, error: &str) {
+        self.thinking = false;
+        self.add(ChatItem {
+            mine: false,
+            text: format!("{}: {error}]", crate::brain::ERROR_PREFIX),
+            elsewhere: false,
+        });
     }
 
     /// A conexão caiu. `code` é o código de fechamento do WebSocket, se veio um.
@@ -287,7 +346,7 @@ impl Core {
     }
 
     pub fn toggle_pause(&mut self) {
-        if self.connected() {
+        if self.connected() && !self.local {
             let kind = if self.paused { "resume" } else { "pause" };
             self.send(kind, json!({}));
         }
@@ -295,6 +354,8 @@ impl Core {
 
     pub fn status_text(&self) -> &'static str {
         match self.status {
+            Status::Conectado if self.local && self.thinking => "pensando...",
+            Status::Conectado if self.local => "sozinha no celular",
             Status::Conectado if self.paused => "pausada (só responde a você)",
             Status::Conectado => "conectada",
             Status::Conectando => "conectando...",
@@ -427,6 +488,32 @@ mod tests {
         assert_eq!(c.status, Status::TokenRecusado);
         let (retry, _) = c.connection_lost(None, "");
         assert!(retry);
+    }
+
+    #[test]
+    fn modo_sozinha_responde_sem_rede() {
+        let mut c = Core::default();
+        c.start_local(vec![ChatItem {
+            mine: true,
+            text: "antes".into(),
+            elsewhere: false,
+        }]);
+        assert!(c.connected() && c.local);
+        assert_eq!(c.status_text(), "sozinha no celular");
+        assert!(c.send_text("oi").0);
+        assert_eq!(c.take_local_messages(), 1);
+        assert_eq!(c.status_text(), "pensando...");
+        let fx = c.local_reply("Oi! Tô aqui.");
+        assert_eq!(fx, vec![Effect::AkemiText("Oi! Tô aqui.".into())]);
+        let say = c.next_say().unwrap();
+        c.finish_say(&say.id, true);
+        assert_eq!(c.take_local_messages(), 0); // o `spoken` não vai para lugar nenhum
+        c.toggle_pause();
+        assert!(c.take_outbox().is_empty());
+        let texts: Vec<_> = c.items.iter().map(|i| i.text.as_str()).collect();
+        assert_eq!(texts, ["antes", "oi", "Oi! Tô aqui."]);
+        c.set_connecting();
+        assert!(!c.local);
     }
 
     #[test]

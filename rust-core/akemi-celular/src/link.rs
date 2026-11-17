@@ -8,6 +8,7 @@
 
 use std::io::ErrorKind;
 use std::net::{TcpStream, ToSocketAddrs};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -16,8 +17,9 @@ use std::time::{Duration, Instant};
 use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::{Message, WebSocket};
 
-use crate::core::{Core, Effect, Status};
-use crate::settings::{parse_ws_url, Settings};
+use crate::brain::Brain;
+use crate::core::{ChatItem, Core, Effect, Status};
+use crate::settings::{parse_ws_url, Mode, Settings};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(120);
@@ -52,6 +54,8 @@ struct Inner {
     muted: AtomicBool,
     platform: Arc<dyn Platform>,
     on_change: Box<dyn Fn() + Send + Sync>,
+    /// Onde guardar a conversa do modo sozinha (no celular).
+    history_file: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -62,7 +66,12 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Link {
-    pub fn new(platform: Arc<dyn Platform>, on_change: impl Fn() + Send + Sync + 'static) -> Self {
+    /// `data_dir`: a pasta do app, onde fica a conversa do modo sozinha (`None` = não guarda).
+    pub fn new(
+        platform: Arc<dyn Platform>,
+        data_dir: Option<PathBuf>,
+        on_change: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
         let inner = Arc::new(Inner {
             core: Mutex::new(Core::default()),
             say_ready: Condvar::new(),
@@ -71,6 +80,7 @@ impl Link {
             muted: AtomicBool::new(false),
             platform,
             on_change: Box::new(on_change),
+            history_file: data_dir.map(|d| d.join("conversa-sozinha.json")),
         });
         let net = inner.clone();
         thread::Builder::new()
@@ -204,6 +214,12 @@ fn net_loop(inner: &Inner) {
         lock(&inner.core).set_connecting();
         inner.changed();
 
+        if settings.mode == Mode::Alone {
+            alone_loop(inner, generation, &settings);
+            delay = 1;
+            continue;
+        }
+
         match connect(&settings.url) {
             Err(_) => {
                 lock(&inner.core).unreachable(&settings.url);
@@ -333,6 +349,74 @@ fn session(inner: &Inner, ws: &mut WebSocket<TcpStream>, generation: u64) -> (En
     }
 }
 
+// --------------------------------------------------------- modo sozinha
+/// A Akemi sem o núcleo: cada mensagem sua vai direto para a IA.
+fn alone_loop(inner: &Inner, generation: u64, settings: &Settings) {
+    let brain = Brain::new(settings);
+    let items = inner.history_file.as_ref().map(|f| load_history(f)).unwrap_or_default();
+    lock(&inner.core).start_local(items);
+    inner.changed();
+    while inner.current() == (generation, true) {
+        let pending = lock(&inner.core).take_local_messages();
+        if pending == 0 {
+            thread::sleep(POLL);
+            continue;
+        }
+        inner.changed();
+        let history = lock(&inner.core).items.clone();
+        let answer = brain.reply(&history);
+        if inner.current() != (generation, true) {
+            break; // trocaram as configurações enquanto ela pensava
+        }
+        let fx = {
+            let mut core = lock(&inner.core);
+            match answer {
+                Ok(text) => core.local_reply(&text),
+                Err(e) => {
+                    core.local_error(&e);
+                    Vec::new()
+                }
+            }
+        };
+        inner.say_ready.notify_all();
+        inner.apply(fx);
+        if let Some(file) = &inner.history_file {
+            save_history(file, &lock(&inner.core).items);
+        }
+        inner.changed();
+    }
+}
+
+fn load_history(file: &std::path::Path) -> Vec<ChatItem> {
+    let Ok(raw) = std::fs::read_to_string(file) else {
+        return Vec::new();
+    };
+    let Ok(serde_json::Value::Array(list)) = serde_json::from_str(&raw) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|v| {
+            Some(ChatItem {
+                mine: v.get("de")?.as_str()? == "voce",
+                text: v.get("texto")?.as_str()?.to_string(),
+                elsewhere: false,
+            })
+        })
+        .collect()
+}
+
+fn save_history(file: &std::path::Path, items: &[ChatItem]) {
+    let list: Vec<_> = items
+        .iter()
+        .filter(|i| !i.elsewhere)
+        .map(|i| serde_json::json!({"de": if i.mine { "voce" } else { "akemi" }, "texto": i.text}))
+        .collect();
+    let tmp = file.with_extension("json.tmp");
+    if std::fs::write(&tmp, serde_json::Value::Array(list).to_string()).is_ok() {
+        let _ = std::fs::rename(tmp, file);
+    }
+}
+
 // ------------------------------------------------------------------- voz
 fn voice_loop(inner: &Inner) {
     loop {
@@ -403,7 +487,7 @@ mod tests {
         });
 
         let quiet = Arc::new(Quiet(Mutex::new(Vec::new())));
-        let link = Link::new(quiet.clone(), || {});
+        let link = Link::new(quiet.clone(), None, || {});
         let settings = Settings {
             url: format!("ws://127.0.0.1:{port}"),
             token: "x".repeat(20),
@@ -442,7 +526,7 @@ mod tests {
             let _ = ws.close(Some(frame));
             while ws.read().is_ok() {}
         });
-        let link = Link::new(Arc::new(Quiet(Mutex::new(Vec::new()))), || {});
+        let link = Link::new(Arc::new(Quiet(Mutex::new(Vec::new()))), None, || {});
         link.start(&Settings {
             url: format!("ws://127.0.0.1:{port}"),
             token: "y".repeat(20),
@@ -450,5 +534,61 @@ mod tests {
         });
         wait_for(&link, |c| c.status == Status::TokenRecusado);
         assert!(link.with_core(|c| c.last_error.contains("AKEMI_TOKEN")));
+    }
+
+    /// Modo sozinha: sem núcleo, a mensagem vai para uma IA (de teste) e a conversa fica salva.
+    #[test]
+    fn sozinha_no_celular_com_uma_ia_de_teste() {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = server.local_addr().unwrap().port();
+        thread::spawn(move || {
+            let (mut stream, _) = server.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let (mut len, mut line) = (0usize, String::new());
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                let l = line.trim().to_ascii_lowercase();
+                if l.is_empty() {
+                    break;
+                }
+                if let Some(v) = l.strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap();
+                }
+            }
+            let mut body = vec![0; len];
+            reader.read_exact(&mut body).unwrap();
+            let answer = r#"{"choices":[{"message":{"content":"Tô aqui, mesmo sem o PC."}}]}"#;
+            let head = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", answer.len());
+            stream.write_all(head.as_bytes()).unwrap();
+            stream.write_all(answer.as_bytes()).unwrap();
+        });
+
+        let dir = std::env::temp_dir().join(format!("akemi-sozinha-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let quiet = Arc::new(Quiet(Mutex::new(Vec::new())));
+        let link = Link::new(quiet.clone(), Some(dir.clone()), || {});
+        link.start(&Settings {
+            mode: crate::settings::Mode::Alone,
+            provider: crate::settings::Provider::Other,
+            brain_url: format!("http://127.0.0.1:{port}/v1"),
+            brain_model: "teste".into(),
+            ..Settings::default()
+        });
+        wait_for(&link, |c| c.connected() && c.local);
+        assert!(link.send_text("cadê você?"));
+        wait_for(&link, |c| c.items.len() == 2 && !c.thinking);
+        assert_eq!(link.with_core(|c| c.items[1].text.clone()), "Tô aqui, mesmo sem o PC.");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while lock(&quiet.0).is_empty() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(*lock(&quiet.0), vec!["Tô aqui, mesmo sem o PC.".to_string()]);
+        let saved = load_history(&dir.join("conversa-sozinha.json"));
+        assert_eq!(saved.len(), 2);
+        assert!(saved[0].mine);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

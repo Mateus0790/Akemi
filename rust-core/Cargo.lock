@@ -168,9 +168,11 @@ version = "0.1.0"
 dependencies = [
  "jni 0.21.1",
  "serde_json",
+ "serde_yaml",
  "slint",
  "slint-build",
  "tungstenite",
+ "ureq",
 ]
 
 [[package]]

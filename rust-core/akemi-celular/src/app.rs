@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::core::Status;
 use crate::link::{Link, Platform};
-use crate::settings::Settings;
+use crate::settings::{Form, Mode, Provider, Settings};
 
 slint::include_modules!();
 
@@ -21,7 +21,7 @@ pub fn run(platform: Arc<dyn Platform>, data_dir: PathBuf) -> Result<(), slint::
 
     // Toda mudança na ligação (de qualquer linha) redesenha a tela na linha da tela.
     let weak = ui.as_weak();
-    let link = Link::new(platform, move || {
+    let link = Link::new(platform, Some(data_dir.clone()), move || {
         let weak = weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(ui) = weak.upgrade() {
@@ -77,9 +77,20 @@ pub fn run(platform: Arc<dyn Platform>, data_dir: PathBuf) -> Result<(), slint::
     });
     ui.on_save_settings({
         let (link, weak, settings, dir) = (link.clone(), ui.as_weak(), settings.clone(), data_dir.clone());
-        move |url, token, name| {
+        move |f: SettingsForm| {
             let Some(ui) = weak.upgrade() else { return };
-            let new = match settings.borrow().validated(&url, &token, &name) {
+            let form = Form {
+                mode: if f.mode == 1 { Mode::Alone } else { Mode::Core },
+                url: f.url.into(),
+                token: f.token.into(),
+                name: f.name.into(),
+                provider: Provider::from_index(f.provider),
+                api_key: f.api_key.into(),
+                brain_model: f.model.into(),
+                brain_url: f.brain_url.into(),
+                owner: f.owner.into(),
+            };
+            let new = match settings.borrow().validated(&form) {
                 Ok(new) => new,
                 Err(msg) => {
                     ui.set_settings_error(msg.into());
@@ -116,9 +127,17 @@ pub fn resumed() {
 }
 
 fn fill_settings(ui: &AppWindow, s: &Settings) {
-    ui.set_cfg_url(s.url.as_str().into());
-    ui.set_cfg_token(s.token.as_str().into());
-    ui.set_cfg_name(s.name.as_str().into());
+    ui.set_cfg(SettingsForm {
+        mode: if s.mode == Mode::Alone { 1 } else { 0 },
+        url: s.url.as_str().into(),
+        token: s.token.as_str().into(),
+        name: s.name.as_str().into(),
+        provider: s.provider.index(),
+        api_key: s.api_key.as_str().into(),
+        model: s.brain_model.as_str().into(),
+        brain_url: s.brain_url.as_str().into(),
+        owner: s.owner.as_str().into(),
+    });
     ui.set_cfg_complete(s.complete());
 }
 
@@ -133,6 +152,7 @@ fn refresh(ui: &AppWindow, link: &Link) {
         });
         ui.set_connected(c.connected());
         ui.set_paused(c.paused);
+        ui.set_local(c.local);
         ui.set_speaking(c.speaking());
         ui.set_banner(if c.connected() {
             SharedString::new()

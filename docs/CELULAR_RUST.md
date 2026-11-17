@@ -11,6 +11,8 @@ dos dois, e a configuração do PC é a mesma.
 - **Voz**: a do próprio celular (TextToSpeech do Android), igual ao app Flutter
 - **Notificações**: o que ela disser com o app em segundo plano (lembretes,
   iniciativas, avisos). Tocar na notificação volta para o app
+- **Funciona sem o PC**: conecta num servidor em casa ou na nuvem, ou fica
+  **sozinha no celular**, chamando a IA direto ([SEM_PC.md](SEM_PC.md))
 - **O rosto dela no topo** muda: parada, falando, ou dormindo quando está
   pausada ou desconectada
 
@@ -37,14 +39,21 @@ Igual ao app Flutter ([CELULAR.md, passo 2](CELULAR.md#2-ligar-a-porta-do-celula
 
 ## 3. Conectar
 
-Na primeira vez o app abre **Conectar na Akemi**: endereço (pode ser só o IP,
-`192.168.0.15`), o `AKEMI_TOKEN` e o nome do aparelho.
+Na primeira vez o app abre **Onde a Akemi pensa**, com dois modos:
+
+- **PC ou servidor**: endereço (pode ser só o IP, `192.168.0.15`), o
+  `AKEMI_TOKEN` e o nome do aparelho. O núcleo pode estar no PC ou num servidor
+  ligado o tempo todo, em casa ou na nuvem.
+- **Sozinha no celular**: a IA (NVIDIA, OpenAI, Claude ou outra compatível), a
+  chave, o modelo e o seu nome. Não precisa de PC nem de servidor.
+
+Os três jeitos de usar sem o PC estão em [SEM_PC.md](SEM_PC.md).
 
 | Botão | O que faz |
 |---|---|
 | ➤ (ou Enter) | manda a mensagem |
 | 🔊 / 🔇 | voz ligada ou só texto |
-| ⏸ / ▶ | pausa a autonomia dela (igual ao `/pausar`) |
+| ⏸ / ▶ | pausa a autonomia dela (igual ao `/pausar`; não aparece no modo sozinha) |
 | ⚙ | troca endereço, token ou nome |
 
 **Falar em vez de digitar:** toque no 🎤 do teclado (Gboard e a maioria dos
@@ -103,7 +112,8 @@ cargo apk run -p akemi-celular --lib     # com o celular no USB (depuração USB
 | Arquivo | O que faz |
 |---|---|
 | `src/core.rs` | o protocolo e o estado da conversa (sem rede, testado) |
-| `src/link.rs` | a linha de rede (conecta, reconecta) e a linha de voz |
+| `src/brain.rs` | o modo sozinha: a personalidade (`persona.yaml`) e as APIs das IAs |
+| `src/link.rs` | a linha de rede (conecta, reconecta), a do modo sozinha e a de voz |
 | `src/settings.rs` | endereço, token e nome, salvos no celular |
 | `src/app.rs` | liga a tela à conversa |
 | `src/android.rs` | a entrada no Android |

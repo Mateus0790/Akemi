@@ -41,12 +41,12 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let (url, token) = (args[1].clone(), args[2].clone());
     let rec = Arc::new(Recorder::default());
-    let link = Link::new(rec.clone(), || {});
+    let link = Link::new(rec.clone(), None, || {});
     link.start(&Settings {
         url,
         token,
         name: "teste".into(),
-        muted: false,
+        ..Settings::default()
     });
 
     wait("boas-vindas com histórico", || {

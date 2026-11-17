@@ -5,10 +5,10 @@ name: Celular (Rust)
 # Artifacts → akemi-celular-apk (docs/CELULAR_RUST.md).
 on:
   push:
-    paths: ["rust-core/akemi-celular/**", "rust-core/Cargo.*", "akemi/net/companion.py",
+    paths: ["rust-core/akemi-celular/**", "rust-core/Cargo.*", "akemi/net/companion.py", "akemi/brain/persona.yaml",
             ".github/workflows/celular-rust.yml"]
   pull_request:
-    paths: ["rust-core/akemi-celular/**", "rust-core/Cargo.*", "akemi/net/companion.py",
+    paths: ["rust-core/akemi-celular/**", "rust-core/Cargo.*", "akemi/net/companion.py", "akemi/brain/persona.yaml",
             ".github/workflows/celular-rust.yml"]
   workflow_dispatch:
 

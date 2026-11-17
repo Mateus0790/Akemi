@@ -18,6 +18,9 @@ path = "src/main.rs"
 
 [dependencies]
 serde_json = "1"
+serde_yaml = "0.9"
+# HTTPS para o modo sozinha (a IA direto do celular). Certificados embutidos.
+ureq = { version = "2", features = ["json"] }
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]

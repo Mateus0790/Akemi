@@ -4,6 +4,7 @@
 //! empresta a tela, a voz e as notificações dele. Ver docs/CELULAR_RUST.md.
 
 pub mod app;
+pub mod brain;
 pub mod core;
 pub mod link;
 pub mod settings;

@@ -1,6 +1,6 @@
 // Tela do app da Akemi (Rust + Slint). A lógica está em src/; aqui só o desenho.
 
-import { LineEdit, Button, ListView, ScrollView, Palette } from "std-widgets.slint";
+import { LineEdit, Button, ListView, ScrollView, ComboBox, Palette } from "std-widgets.slint";
 
 export struct ChatRow {
     mine: bool,
@@ -120,14 +120,65 @@ component Field inherits VerticalLayout {
     }
 }
 
+// O que a tela de configuração devolve (ver settings::Form).
+export struct SettingsForm {
+    // 0 = PC/servidor, 1 = sozinha no celular
+    mode: int,
+    url: string,
+    token: string,
+    name: string,
+    // 0 NVIDIA, 1 OpenAI, 2 Anthropic, 3 outro
+    provider: int,
+    api-key: string,
+    model: string,
+    brain-url: string,
+    owner: string,
+}
+
+component ModeTab inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked;
+    height: 40px;
+    border-radius: 20px;
+    background: selected ? Cores.rosa : transparent;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-action-default => { clicked(); }
+    Text {
+        text: root.text;
+        color: selected ? #FFFFFF : Cores.texto;
+        font-weight: selected ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+component Hint inherits Text {
+    wrap: word-wrap;
+    font-size: 13px;
+    color: Cores.apagado;
+}
+
 component SettingsPage inherits Rectangle {
-    in property <string> url;
-    in property <string> token;
-    in property <string> device-name;
+    in-out property <SettingsForm> form;
     in property <string> error;
     in property <bool> can-go-back;
-    callback save(string, string, string);
+    callback save(SettingsForm);
     callback back;
+
+    in-out property <int> mode: form.mode;
+    in-out property <string> url: form.url;
+    in-out property <string> token: form.token;
+    in-out property <string> device-name: form.name;
+    in-out property <int> provider: form.provider;
+    in-out property <string> api-key: form.api-key;
+    in-out property <string> model: form.model;
+    in-out property <string> brain-url: form.brain-url;
+    in-out property <string> owner: form.owner;
 
     background: Cores.fundo;
     VerticalLayout {
@@ -144,7 +195,7 @@ component SettingsPage inherits Rectangle {
                     clicked => { root.back(); }
                 }
                 Text {
-                    text: "Conectar na Akemi";
+                    text: "Onde a Akemi pensa";
                     font-size: 20px;
                     font-weight: 600;
                     color: Cores.texto;
@@ -157,37 +208,104 @@ component SettingsPage inherits Rectangle {
                 padding: 18px;
                 spacing: 14px;
                 alignment: start;
-                Text {
-                    text: "No PC, rode \"akemi --celular\" (ou deixe o servidor ligado). Ele mostra o endereço para colocar aqui. O celular precisa estar no mesmo Wi-Fi (ou na mesma Tailscale).";
-                    wrap: word-wrap;
-                    color: Cores.texto;
+                Rectangle {
+                    border-radius: 22px;
+                    background: Cores.balao-dela;
+                    HorizontalLayout {
+                        padding: 2px;
+                        ModeTab {
+                            text: "PC ou servidor";
+                            selected: mode == 0;
+                            clicked => { mode = 0; }
+                        }
+                        ModeTab {
+                            text: "Sozinha no celular";
+                            selected: mode == 1;
+                            clicked => { mode = 1; }
+                        }
+                    }
                 }
-                url-field := Field {
-                    label: "Endereço";
-                    placeholder: "192.168.0.10 ou ws://192.168.0.10:8765";
-                    input-type: InputType.text;
-                    text: root.url;
+
+                if mode == 0: VerticalLayout {
+                    spacing: 14px;
+                    Hint {
+                        text: "A Akemi completa: memória, ações no PC, secretária e iniciativas. O núcleo pode estar no PC (\"akemi --celular\"), num servidor em casa ou na nuvem, ligado o tempo todo. Em casa use o mesmo Wi-Fi; fora, a Tailscale.";
+                    }
+                    Field {
+                        label: "Endereço";
+                        placeholder: "192.168.0.10 ou ws://192.168.0.10:8765";
+                        text <=> root.url;
+                    }
+                    Field {
+                        label: "Token (AKEMI_TOKEN)";
+                        placeholder: "pelo menos 16 caracteres";
+                        input-type: InputType.password;
+                        text <=> root.token;
+                    }
+                    Field {
+                        label: "Nome deste celular";
+                        placeholder: "celular";
+                        text <=> root.device-name;
+                    }
                 }
-                token-field := Field {
-                    label: "Token (AKEMI_TOKEN)";
-                    placeholder: "pelo menos 16 caracteres";
-                    input-type: InputType.password;
-                    text: root.token;
+
+                if mode == 1: VerticalLayout {
+                    spacing: 14px;
+                    Hint {
+                        text: "Sem PC e sem servidor: o celular fala direto com a IA, com a mesma personalidade. A conversa fica guardada só no celular. Aqui ela não tem a memória do PC, nem ações no computador, secretária ou iniciativas.";
+                    }
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text {
+                            text: "IA";
+                            font-size: 13px;
+                            color: Cores.apagado;
+                        }
+                        ComboBox {
+                            model: ["NVIDIA (build.nvidia.com)", "OpenAI", "Anthropic (Claude)", "Outra (compatível com OpenAI)"];
+                            current-index <=> root.provider;
+                        }
+                    }
+                    if provider == 3: Field {
+                        label: "Endereço da API";
+                        placeholder: "http://192.168.0.10:11434/v1 (Ollama)";
+                        text <=> root.brain-url;
+                    }
+                    Field {
+                        label: provider == 3 ? "Chave da API (se precisar)" : "Chave da API";
+                        placeholder: provider == 0 ? "nvapi-..." : provider == 2 ? "sk-ant-..." : "sk-...";
+                        input-type: InputType.password;
+                        text <=> root.api-key;
+                    }
+                    Field {
+                        label: "Modelo";
+                        placeholder: provider == 0 ? "nvidia/ising-calibration-1.5-31b (padrão)"
+                            : provider == 2 ? "claude-haiku-4-5 (padrão)"
+                            : provider == 3 ? "qwen2.5:7b" : "nome do modelo";
+                        text <=> root.model;
+                    }
+                    Field {
+                        label: "Seu nome (como ela te chama)";
+                        placeholder: "Mateus";
+                        text <=> root.owner;
+                    }
                 }
-                name-field := Field {
-                    label: "Nome deste celular";
-                    placeholder: "celular";
-                    text: root.device-name;
-                }
+
                 if error != "": Text {
                     text: error;
                     wrap: word-wrap;
                     color: #E5484D;
                 }
                 Button {
-                    text: "Salvar e conectar";
+                    text: mode == 0 ? "Salvar e conectar" : "Salvar e conversar";
                     primary: true;
-                    clicked => { root.save(url-field.text, token-field.text, name-field.text); }
+                    clicked => {
+                        root.save({
+                            mode: mode, url: url, token: token, name: device-name,
+                            provider: provider, api-key: api-key, model: model,
+                            brain-url: brain-url, owner: owner,
+                        });
+                    }
                 }
             }
         }
@@ -214,10 +332,10 @@ export component AppWindow inherits Window {
     in-out property <bool> show-settings;
     in-out property <string> draft;
     // Configurações atuais (para preencher o formulário).
-    in property <string> cfg-url;
-    in property <string> cfg-token;
-    in property <string> cfg-name;
+    in property <SettingsForm> cfg;
     in property <bool> cfg-complete;
+    // Modo sozinha no celular (sem pausa: não tem núcleo para pausar).
+    in property <bool> local;
     in property <string> settings-error;
 
     // ---------------------------------------------------------- ações (tela → Rust)
@@ -225,7 +343,7 @@ export component AppWindow inherits Window {
     callback typing(string);
     callback toggle-mute;
     callback toggle-pause;
-    callback save-settings(string, string, string);
+    callback save-settings(SettingsForm);
 
     // Rola até a última mensagem.
     public function scroll-to-end() {
@@ -301,7 +419,7 @@ export component AppWindow inherits Window {
                         label: muted ? "Ligar a voz" : "Só texto";
                         clicked => { root.toggle-mute(); }
                     }
-                    IconButton {
+                    if !local: IconButton {
                             icon: paused ? Icones.play : Icones.pausa;
                         label: paused ? "Voltar a autonomia" : "Pausar a autonomia";
                         enabled: connected;
@@ -386,12 +504,10 @@ export component AppWindow inherits Window {
         if show-settings: SettingsPage {
             width: 100%;
             height: 100%;
-            url: cfg-url;
-            token: cfg-token;
-            device-name: cfg-name;
+            form: cfg;
             error: settings-error;
             can-go-back: cfg-complete;
-            save(u, t, n) => { root.save-settings(u, t, n); }
+            save(f) => { root.save-settings(f); }
             back => { root.show-settings = false; }
         }
     }
