@@ -1,0 +1,20 @@
+[package]
+name = "akemi-painel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Painel desktop da Akemi: configura modelos de IA, vozes, pastas, chaves, personalidade e MCP"
+publish = false
+
+[[bin]]
+name = "akemi-painel"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+serde_json = "1"
+serde_yaml = "0.9"
+ureq = { version = "2", features = ["json"] }
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+rfd = "0.15"

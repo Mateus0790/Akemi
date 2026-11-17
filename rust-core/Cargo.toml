@@ -3,7 +3,7 @@
 # não estiver. Veja docs/RUST.md.
 [workspace]
 resolver = "2"
-members = ["akemi-audio"]
+members = ["akemi-audio", "akemi-painel"]
 
 [profile.release]
 lto = "thin"

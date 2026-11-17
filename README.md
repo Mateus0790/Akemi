@@ -414,6 +414,12 @@ Digite `/painel` no console: abre uma página para ligar e desligar as funções
 8766. Quando você desliga uma função, **ela fica triste** e diz isso uma vez, sem chantagem.
 Religou, ela fica feliz. Veja [docs/PAINEL.md](docs/PAINEL.md).
 
+**Painel desktop (Rust):** para configurar *tudo* (modelos de IA, vozes, pastas liberadas,
+chaves, microfone, visão, memória, secretária, MCP, personalidade) numa janela, sem abrir o
+`.env`: `cargo run --release --manifest-path rust-core/Cargo.toml -p akemi-painel`, ou baixe o
+`akemi-painel.exe` nos Artifacts do CI. Ele busca os modelos e vozes que o provedor tem e
+mexe só nas linhas que você mudou. Veja [docs/PAINEL_RUST.md](docs/PAINEL_RUST.md).
+
 ## Assinatura: oficial ou modificada
 
 Os builds oficiais saem assinados, e a Akemi confere a si mesma ao ligar: ela sabe se é a

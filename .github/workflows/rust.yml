@@ -32,7 +32,7 @@ jobs:
 
       # O DSP puro (sem Python) tem testes próprios.
       - name: cargo test
-        run: cargo test --manifest-path rust-core/Cargo.toml --no-default-features
+        run: cargo test --manifest-path rust-core/Cargo.toml -p akemi-audio --no-default-features
 
       # Um wheel abi3 serve para o Python 3.11 em diante.
       - name: Gerar o wheel
