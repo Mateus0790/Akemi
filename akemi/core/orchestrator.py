@@ -99,16 +99,24 @@ def build_tts(settings: Settings) -> TTSEngine:
     return engine
 
 
+CLOUD_VOICES = ("fish", "elevenlabs")
+
+
 def default_voice(settings: Settings) -> str:
-    """A voz do ``--voz`` quando o .env não escolhe: Fish Audio se tiver chave, senão Piper."""
-    return "fish" if settings.fish_api_key.strip() else "piper"
+    """A voz do ``--voz`` quando o .env não escolhe: a da nuvem que tiver chave
+    (Fish Audio, depois ElevenLabs), senão Piper."""
+    if settings.fish_api_key.strip():
+        return "fish"
+    if settings.elevenlabs_api_key.strip():
+        return "elevenlabs"
+    return "piper"
 
 
 def fallback_voice(settings: Settings) -> str:
     """Qual voz assume quando a principal falha (``TTS_FALLBACK``)."""
     choice = settings.tts_fallback
     if choice == "auto":
-        if settings.tts_engine != "fish":
+        if settings.tts_engine not in CLOUD_VOICES:
             return "console"  # voz local cai para o terminal, como sempre
         if settings.kokoro_model_path.exists() and settings.kokoro_voices_path.exists():
             return "kokoro"
@@ -133,6 +141,23 @@ def _voice_engine(name: str, settings: Settings, player) -> TTSEngine:
             language=settings.fish_language,
             sample_rate=settings.fish_sample_rate,
             timeout_s=settings.fish_timeout_s,
+            player=player,
+        )
+    if name == "elevenlabs":
+        from akemi.tts.elevenlabs_engine import ElevenLabsTTS
+
+        return ElevenLabsTTS(
+            settings.elevenlabs_api_key,
+            voice_id=settings.elevenlabs_voice_id,
+            model=settings.elevenlabs_model,
+            base_url=settings.elevenlabs_base_url,
+            stability=settings.elevenlabs_stability,
+            similarity_boost=settings.elevenlabs_similarity_boost,
+            style=settings.elevenlabs_style,
+            speed=settings.elevenlabs_speed,
+            language=settings.elevenlabs_language,
+            sample_rate=settings.elevenlabs_sample_rate,
+            timeout_s=settings.elevenlabs_timeout_s,
             player=player,
         )
     if name == "kokoro":

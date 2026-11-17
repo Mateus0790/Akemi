@@ -417,3 +417,135 @@ async def test_missing_fish_key_degrades_to_backup_at_startup():
     assert health and health[0][0] is False and "FISH_API_KEY" in health[0][1]
     await tts.speak("oi")
     assert backup.said == ["oi"]
+
+
+# -------------------------------------------------------------- ElevenLabs
+@pytest.mark.asyncio
+async def test_elevenlabs_streams_pcm_with_voice_and_model():
+    import json
+
+    from akemi.tts.elevenlabs_engine import ElevenLabsTTS
+
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["key"] = request.headers["xi-api-key"]
+        seen["body"] = json.loads(request.content)
+        return pcm_response([b"\x01", b"\x00\x02\x00", b"\x03"])
+
+    player = FakePlayer()
+    tts = ElevenLabsTTS("chave", voice_id="voz-akemi", speed=1.1, stability=0.4, language="pt",
+                        client=fish_client(handler), player=player, block_ms=0)
+    await tts.speak("Oi, Mateus!")
+    assert seen["url"] == ("https://api.elevenlabs.io/v1/text-to-speech/voz-akemi/stream"
+                           "?output_format=pcm_24000")
+    assert seen["key"] == "chave"
+    body = seen["body"]
+    assert body["text"] == "Oi, Mateus!" and body["model_id"] == "eleven_multilingual_v2"
+    assert body["language_code"] == "pt"
+    assert body["voice_settings"] == {"stability": 0.4, "speed": 1.1}
+    assert all(len(pcm) % 2 == 0 and sr == 24000 and ch == 1 for pcm, sr, ch in player.played)
+    assert b"".join(p[0] for p in player.played) == b"\x01\x00\x02\x00"
+
+
+@pytest.mark.asyncio
+async def test_elevenlabs_default_settings_send_only_text_and_model():
+    import json
+
+    from akemi.tts.elevenlabs_engine import ElevenLabsTTS
+
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return pcm_response([b"\x00\x00" * 10])
+
+    tts = ElevenLabsTTS("k", voice_id="v", client=fish_client(handler), player=FakePlayer())
+    await tts.speak("oi")
+    assert bodies[0] == {"text": "oi", "model_id": "eleven_multilingual_v2"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "detail", "expected"), [
+    (401, {"status": "invalid_api_key", "message": "Invalid API key"}, "ELEVENLABS_API_KEY"),
+    (401, {"status": "quota_exceeded", "message": "no credits"}, "créditos"),
+    (401, {"status": "missing_permissions", "message": "nope"}, "Text to Speech"),
+    (404, {"status": "voice_not_found", "message": "nope"}, "ELEVENLABS_VOICE_ID"),
+    (403, {"status": "x", "message": "output_format pcm_44100 requires Pro"}, "ELEVENLABS_SAMPLE_RATE=24000"),
+    (429, {"status": "too_many_concurrent_requests", "message": "x"}, "devagar"),
+    (503, {"status": "x", "message": "x"}, "fora do ar"),
+])
+async def test_elevenlabs_http_errors_are_explained(status, detail, expected):
+    import httpx
+
+    from akemi.tts.elevenlabs_engine import ElevenLabsError, ElevenLabsTTS
+
+    def handler(request):
+        return httpx.Response(status, json={"detail": detail})
+
+    player = FakePlayer()
+    tts = ElevenLabsTTS("k", voice_id="x", client=fish_client(handler), player=player)
+    with pytest.raises(ElevenLabsError, match=expected):
+        await tts.speak("oi")
+    assert player.played == []
+
+
+@pytest.mark.asyncio
+async def test_elevenlabs_offline_raises_so_the_backup_voice_speaks():
+    import httpx
+
+    from akemi.core.health import ResilientTTS
+    from akemi.tts.elevenlabs_engine import ElevenLabsTTS
+
+    def handler(request):
+        raise httpx.ConnectError("sem internet", request=request)
+
+    class Backup(TTSEngine):
+        def __init__(self):
+            self.said = []
+
+        async def speak(self, text):
+            self.said.append(text)
+
+    backup = Backup()
+    tts = ResilientTTS(ElevenLabsTTS("k", voice_id="v", client=fish_client(handler), player=FakePlayer()),
+                       fallback=backup)
+    await tts.speak("a frase não se perde")
+    assert backup.said == ["a frase não se perde"]
+
+
+@pytest.mark.parametrize(("kwargs", "expected"), [
+    ({"api_key": ""}, "ELEVENLABS_API_KEY"),
+    ({"api_key": "k"}, "ELEVENLABS_VOICE_ID"),
+    ({"api_key": "k", "voice_id": "v", "sample_rate": 12345}, "ELEVENLABS_SAMPLE_RATE"),
+])
+def test_elevenlabs_missing_config_is_explained(kwargs, expected):
+    from akemi.tts.elevenlabs_engine import ElevenLabsError, ElevenLabsTTS
+
+    api_key = kwargs.pop("api_key")
+    with pytest.raises(ElevenLabsError, match=expected):
+        ElevenLabsTTS(api_key, player=FakePlayer(), **kwargs).load()
+
+
+def test_build_tts_elevenlabs_with_local_backup(tmp_path):
+    from akemi.core.health import ResilientTTS
+    from akemi.tts.elevenlabs_engine import ElevenLabsTTS
+    from akemi.tts.piper_engine import PiperTTS
+
+    piper = tmp_path / "p.onnx"
+    piper.write_bytes(b"x")
+    s = Settings(_env_file=None, tts_engine="elevenlabs", elevenlabs_api_key="k", elevenlabs_voice_id="abc",
+                 elevenlabs_model="eleven_flash_v2_5", elevenlabs_speed=0.9,
+                 kokoro_model_path=tmp_path / "x", piper_model_path=piper)
+    tts = build_tts(s)
+    assert isinstance(tts, ResilientTTS) and isinstance(tts.engine, ElevenLabsTTS)
+    assert tts.engine.voice_id == "abc" and tts.engine.model == "eleven_flash_v2_5" and tts.engine.speed == 0.9
+    assert isinstance(tts.fallback, ResilientTTS) and isinstance(tts.fallback.engine, PiperTTS)
+
+
+def test_default_voice_prefers_fish_then_elevenlabs():
+    from akemi.core.orchestrator import default_voice
+
+    assert default_voice(Settings(_env_file=None, elevenlabs_api_key="k")) == "elevenlabs"
+    assert default_voice(Settings(_env_file=None, fish_api_key="f", elevenlabs_api_key="k")) == "fish"

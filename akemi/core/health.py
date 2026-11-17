@@ -10,7 +10,7 @@ Três peças:
   reinicia com espera crescente (1 s, 2 s, 4 s... até 60 s). Um bug num
   sentido nunca derruba a Akemi inteira nem fica morto para sempre.
 - :class:`ResilientTTS`: se a voz falhar várias vezes seguidas, ela passa a
-  falar com a voz reserva (a local, quando a principal é o Fish Audio) ou a
+  falar com a voz reserva (a local, quando a principal está na nuvem) ou a
   escrever no terminal (nada do que ia falar se perde) e de tempos em tempos
   tenta a voz principal de novo.
 """
@@ -132,7 +132,7 @@ class ResilientTTS(TTSEngine):
     """Voz que se recupera sozinha.
 
     Depois de ``max_failures`` erros seguidos, passa a usar o ``fallback``
-    (terminal, ou a voz local reserva quando a principal é o Fish Audio). A
+    (terminal, ou a voz local reserva quando a principal está na nuvem). A
     cada ``retry_after_s`` tenta a voz principal de novo; se der certo, volta
     a falar com ela. Uma frase que falha na voz sai no reserva, então
     nada se perde.

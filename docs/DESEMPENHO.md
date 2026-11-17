@@ -37,7 +37,9 @@ fish first audio     ms=620
 | `total_ms` | Do fim da sua fala até ela começar a responder (sem o `fish first audio`). | |
 
 `fish first audio` é quanto a nuvem do Fish Audio levou até o primeiro som
-dessa frase (`FISH_LATENCY=balanced` ou `low` começam antes).
+dessa frase (`FISH_LATENCY=balanced` ou `low` começam antes). Com o
+ElevenLabs, o mesmo número aparece como `elevenlabs first audio`
+(`ELEVENLABS_MODEL=eleven_flash_v2_5` começa antes).
 
 ## Quanto o Whisper ocupa
 
