@@ -101,3 +101,33 @@ class FrameAssembler:
 
     def clear(self) -> None:
         self._buf.clear()
+
+
+class AudioPipeline:
+    """Um callback inteiro: bytes do dispositivo (int16 intercalado) → quadros mono.
+
+    Junta downmix, resample e fatiamento. É a versão em Python do
+    ``akemi_audio_rs.AudioPipeline`` (Rust), com o mesmo resultado byte a byte;
+    :func:`akemi.audio.native.make_pipeline` escolhe uma das duas.
+    """
+
+    def __init__(self, device_rate: int, channels: int, output_rate: int = 16000, frame_ms: int = 20):
+        if channels < 1:
+            raise ValueError("channels must be >= 1")
+        self.device_rate = device_rate
+        self.output_rate = output_rate
+        self.channels = channels
+        self.frame_bytes = output_rate * frame_ms // 1000 * 2
+        self.frames_out = 0
+        self._resampler = StreamResampler(device_rate, output_rate)
+        self._frames = FrameAssembler(self.frame_bytes)
+
+    def push(self, data: bytes) -> list[bytes]:
+        mono = downmix_to_mono_int16(data, self.channels)
+        frames = self._frames.push(self._resampler.push(mono).tobytes())
+        self.frames_out += len(frames)
+        return frames
+
+    def clear(self) -> None:
+        self._resampler = StreamResampler(self.device_rate, self.output_rate)
+        self._frames.clear()

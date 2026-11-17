@@ -13,6 +13,7 @@ from typing import Any
 
 _WHERE = {
     "AudioCapture": ".capture",
+    "AudioPipeline": ".process",
     "FrameAssembler": ".process",
     "downmix_to_mono_int16": ".process",
     "resample_int16": ".process",

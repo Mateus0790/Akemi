@@ -135,3 +135,7 @@ Thumbs.db
 !packaging/akemi.spec
 # Assinatura gerada no build oficial (CI)
 akemi/_assinatura.json
+
+# Núcleo Rust (rust-core): saída do cargo e wheels gerados
+rust-core/target/
+wheelhouse/

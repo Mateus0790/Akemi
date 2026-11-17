@@ -6,13 +6,11 @@ reaproveita o mesmo resample/fatiamento do loopback.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
-import numpy as np
 import structlog
 
-from .process import FrameAssembler, StreamResampler, downmix_to_mono_int16
-from .vad import vad_frame_bytes
+from . import native
 
 logger = structlog.get_logger()
 
@@ -25,8 +23,8 @@ class MicCapture:
         self.block_ms = block_ms
         self._stream = None
         self._callback: Callable[[bytes], None] | None = None
-        self._resampler: StreamResampler | None = None
-        self._frames = FrameAssembler(vad_frame_bytes(TARGET_RATE, 20))
+        # Downmix + resample + quadros de 20 ms (Rust se instalado, senão Python).
+        self._pipeline: Any = None
         self._channels = 1
 
     @staticmethod
@@ -43,9 +41,10 @@ class MicCapture:
         if status:
             logger.debug("mic status", status=str(status))
         try:
-            mono = downmix_to_mono_int16(bytes(indata), self._channels)
-            out = self._resampler.push(mono) if self._resampler else mono
-            for frame in self._frames.push(np.asarray(out, dtype=np.int16).tobytes()):
+            pipeline = self._pipeline
+            if pipeline is None:
+                return
+            for frame in pipeline.push(bytes(indata)):
                 if self._callback:
                     self._callback(frame)
         except Exception as exc:
@@ -59,7 +58,7 @@ class MicCapture:
         info = sd.query_devices(self.device, "input")
         rate = int(info["default_samplerate"])
         self._channels = 1 if info["max_input_channels"] >= 1 else 0
-        self._resampler = StreamResampler(rate, TARGET_RATE) if rate != TARGET_RATE else None
+        self._pipeline = native.make_pipeline(rate, self._channels or 1, TARGET_RATE, 20)
         self._callback = callback
         self._stream = sd.RawInputStream(
             samplerate=rate,
@@ -70,7 +69,7 @@ class MicCapture:
             callback=self._on_audio,
         )
         self._stream.start()
-        logger.info("mic capture started", device=info["name"], sample_rate=rate)
+        logger.info("mic capture started", device=info["name"], sample_rate=rate, audio_core=native.BACKEND)
 
     def stop(self) -> None:
         if self._stream is not None:
@@ -80,4 +79,5 @@ class MicCapture:
             except Exception as exc:
                 logger.warning("error stopping mic", error=str(exc))
             self._stream = None
-        self._frames.clear()
+        if self._pipeline is not None:
+            self._pipeline.clear()

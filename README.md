@@ -433,6 +433,19 @@ akemi-debug
 Abre o loopback dos alto-falantes, converte para PCM 16 kHz mono e imprime
 `Speech detected` quando o VAD dispara.
 
+### Núcleo de áudio em Rust (opcional)
+
+O processamento de cada bloco de áudio (downmix, resample, quadros de 20 ms e
+VAD) também existe em Rust, com o mesmo resultado byte a byte e cerca de 3×
+mais rápido. Instalado, a Akemi usa sozinha; sem ele, segue em Python:
+
+```powershell
+pip install .\rust-core\akemi-audio     # precisa do Rust; ou use o wheel pronto do Actions
+python scripts/benchmark_audio.py       # compara os dois no seu PC
+```
+
+Detalhes, números e como desligar: [docs/RUST.md](docs/RUST.md).
+
 ## Testes
 
 ```powershell

@@ -1,0 +1,59 @@
+name: Núcleo Rust
+
+# Compila o rust-core no Windows e no Linux, confere que o Rust dá o mesmo
+# resultado do Python (tests/test_rust_audio.py) e roda o benchmark.
+# O wheel do Windows fica em Actions → "Núcleo Rust" → a execução mais
+# recente → Artifacts → akemi-audio-rs-windows. Instale com
+#   pip install akemi_audio_rs-*.whl
+# e não precisa ter o Rust no PC (docs/RUST.md).
+on:
+  push:
+    paths: ["rust-core/**", "akemi/audio/**", "tests/test_rust_audio.py", "scripts/benchmark_audio.py",
+            ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust-core/**", "akemi/audio/**", "tests/test_rust_audio.py", "scripts/benchmark_audio.py",
+            ".github/workflows/rust.yml"]
+  workflow_dispatch:
+
+jobs:
+  audio:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # O DSP puro (sem Python) tem testes próprios.
+      - name: cargo test
+        run: cargo test --manifest-path rust-core/Cargo.toml --no-default-features
+
+      # Um wheel abi3 serve para o Python 3.11 em diante.
+      - name: Gerar o wheel
+        run: |
+          python -m pip install --upgrade pip
+          pip wheel ./rust-core/akemi-audio --no-deps -w wheelhouse
+
+      - name: Instalar a Akemi e o wheel
+        shell: bash
+        run: |
+          pip install -e ".[dev]"
+          pip install wheelhouse/akemi_audio_rs-*.whl
+
+      - name: Rust igual ao Python
+        run: pytest tests/test_rust_audio.py tests/test_vad.py tests/test_audio_process.py tests/test_capture.py -v
+
+      - name: Benchmark
+        run: python scripts/benchmark_audio.py
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'windows-latest'
+        with:
+          name: akemi-audio-rs-windows
+          path: wheelhouse/akemi_audio_rs-*.whl

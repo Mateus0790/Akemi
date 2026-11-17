@@ -1,0 +1,21 @@
+[package]
+name = "akemi-audio"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Caminho quente do áudio da Akemi (downmix, resample, frames de 20 ms e VAD) em Rust"
+publish = false
+
+[lib]
+name = "akemi_audio_rs"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# "python" liga o PyO3. Sem ele sobra só o DSP puro, que roda no `cargo test`
+# sem precisar do Python instalado.
+default = ["python"]
+python = ["dep:pyo3"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["abi3-py311"], optional = true }
+webrtc-vad = "0.4"
