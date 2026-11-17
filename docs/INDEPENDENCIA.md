@@ -54,7 +54,7 @@ No Docker do ZimaOS, aponte `OLLAMA_BASE_URL` para o Ollama da sua rede
   crescente (1 s, 2 s, 4 s... até 60 s). Um bug numa parte não derruba as outras.
 - **Vigia**: a cada 15 s ela confere o barramento de eventos e a fila de fala,
   e religa o que tiver parado.
-- **Voz**: se o Fish Audio (voz principal na nuvem) falhar, por falta de
+- **Voz**: se o Fish Audio ou o ElevenLabs (voz principal na nuvem) falhar, por falta de
   internet ou de créditos, a frase sai na hora na voz local reserva (Kokoro ou
   Piper, `TTS_FALLBACK`). Depois de 3 erros seguidos do Piper/Kokoro (placa de
   som sumiu, por exemplo), ela passa a escrever no terminal. Nenhuma frase se

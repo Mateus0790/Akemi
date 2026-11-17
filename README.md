@@ -40,7 +40,7 @@ Arquitetura completa: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Moderação de entrada e saída (ofensas, segredos, links, tentativas de manipulação)
 - Gatilhos para comentários espontâneos (`akemi/brain/triggers.yaml`)
 - Captura de áudio do sistema (WASAPI loopback) → VAD → segmentação → Whisper
-- **Voz principal com Fish Audio** (nuvem) e voz local com Kokoro/Piper (offline) de reserva
+- **Voz principal com Fish Audio ou ElevenLabs** (nuvem) e voz local com Kokoro/Piper (offline) de reserva
 - **Apps por MCP** ([docs/MCP.md](docs/MCP.md)): ela usa as ferramentas dos mesmos servidores
   MCP do Claude Desktop, Cursor e VS Code (arquivos, navegador, GitHub...)
 - **Microfone**: fale "Akemi, ..." e ela responde; interrompa falando por cima dela
@@ -169,11 +169,37 @@ o Fish mesmo sem `TTS_ENGINE`). Escolha ou clone a voz em
 `FISH_VOICE_ID`. `FISH_SPEED` ajusta a velocidade e `FISH_LATENCY=normal`
 troca um pouco de rapidez por qualidade.
 
-**Voz reserva:** o Fish Audio precisa de internet e de créditos. Se ele cair,
+**Voz reserva:** o Fish Audio (e o ElevenLabs) precisa de internet e de créditos. Se ele cair,
 a frase sai na hora numa voz local (Kokoro ou Piper, a que você tiver
 baixado; veja abaixo) e ela tenta o Fish de novo a cada minuto. Nada do que
 ela ia falar se perde. `TTS_FALLBACK` escolhe a reserva (`auto`, `kokoro`,
 `piper` ou `console`). `/saude` mostra se a voz principal está de pé.
+
+### Voz na nuvem: ElevenLabs
+
+Se preferir o [ElevenLabs](https://elevenlabs.io) (biblioteca grande de vozes,
+inclusive em português, ou a sua voz clonada lá), ele funciona do mesmo jeito:
+streaming, voz reserva local e autocura.
+
+```powershell
+pip install -e ".[elevenlabs]"
+```
+
+No `.env`:
+
+```
+TTS_ENGINE=elevenlabs
+ELEVENLABS_API_KEY=sua-chave              # https://elevenlabs.io/app/settings/api-keys
+ELEVENLABS_VOICE_ID=id-da-voz             # no site: abra a voz e "Copy voice ID"
+# ELEVENLABS_MODEL=eleven_flash_v2_5      # começa a falar mais rápido (padrão: eleven_multilingual_v2)
+```
+
+A chave precisa da permissão **Text to Speech**. Diferente do Fish, o
+`ELEVENLABS_VOICE_ID` é obrigatório. `ELEVENLABS_SPEED` (0.7 a 1.2) ajusta a
+velocidade, e `ELEVENLABS_STABILITY`, `ELEVENLABS_SIMILARITY_BOOST` e
+`ELEVENLABS_STYLE` (0 a 1) mudam o jeito da voz. O áudio sai em 24 kHz, que
+funciona em todos os planos (`ELEVENLABS_SAMPLE_RATE=44100` só nos pagos mais
+altos). Com as duas chaves no `.env` e sem `TTS_ENGINE`, o `--voz` escolhe o Fish.
 
 ### Voz local (Piper)
 

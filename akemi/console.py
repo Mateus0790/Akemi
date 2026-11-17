@@ -2,7 +2,7 @@
 
     python -m akemi.console            # usa o provider do .env
     python -m akemi.console --echo     # sem API key (respostas de teste)
-    python -m akemi.console --voz      # fala em voz alta (Fish Audio; sem chave, Piper)
+    python -m akemi.console --voz      # fala em voz alta (Fish Audio ou ElevenLabs; sem chave, Piper)
     python -m akemi.console --mic      # ouve você pelo microfone (diga "Akemi, ...")
     python -m akemi.console --tela     # olha a tela (OCR + modelo de visão opcional)
     python -m akemi.console --celular  # deixa o app do celular conectar (precisa de AKEMI_TOKEN)
@@ -319,7 +319,7 @@ async def teams_login(settings: Settings) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Converse com a Akemi pelo terminal")
     parser.add_argument("--echo", action="store_true", help="usa o provider offline de teste")
-    parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão Fish Audio com FISH_API_KEY, senão Piper)")
+    parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão: Fish Audio ou ElevenLabs, o que tiver chave; senão Piper)")
     parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--celular", action="store_true", help="deixa o app do celular conectar")

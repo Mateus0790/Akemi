@@ -87,9 +87,9 @@ class Settings(BaseSettings):
     chat_max_replies_per_minute: int = 6
 
     # --- Voz ---
-    tts_engine: Literal["console", "piper", "kokoro", "fish"] = "console"
-    # Voz reserva: se a principal falhar (Fish Audio sem internet ou sem
-    # créditos), a frase sai nesta. auto = com Fish, a voz local que você
+    tts_engine: Literal["console", "piper", "kokoro", "fish", "elevenlabs"] = "console"
+    # Voz reserva: se a principal falhar (Fish Audio ou ElevenLabs sem internet
+    # ou sem créditos), a frase sai nesta. auto = com voz na nuvem, a local que você
     # tiver baixado (Kokoro, depois Piper); senão, o terminal.
     tts_fallback: Literal["auto", "console", "piper", "kokoro"] = "auto"
     # Fish Audio: voz principal na nuvem. Ver akemi/tts/fish_engine.py
@@ -103,6 +103,18 @@ class Settings(BaseSettings):
     fish_sample_rate: int = 44100
     fish_base_url: str = "https://api.fish.audio"
     fish_timeout_s: float = 20.0
+    # ElevenLabs: outra voz na nuvem. Ver akemi/tts/elevenlabs_engine.py
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = ""  # obrigatório: id da voz (no site, "Copy voice ID")
+    elevenlabs_model: str = "eleven_multilingual_v2"  # eleven_flash_v2_5 = começa a falar mais rápido
+    elevenlabs_stability: float | None = Field(default=None, ge=0.0, le=1.0)  # vazio = padrão da voz
+    elevenlabs_similarity_boost: float | None = Field(default=None, ge=0.0, le=1.0)
+    elevenlabs_style: float | None = Field(default=None, ge=0.0, le=1.0)
+    elevenlabs_speed: float = Field(default=1.0, ge=0.7, le=1.2)  # >1 fala mais rápido
+    elevenlabs_language: str = ""  # ex. "pt"; só nos modelos flash/turbo v2.5 e v3
+    elevenlabs_sample_rate: int = 24000  # 44100 só nos planos pagos mais altos
+    elevenlabs_base_url: str = "https://api.elevenlabs.io"
+    elevenlabs_timeout_s: float = 20.0
     # Kokoro: voz feminina pt-BR (pf_dora). Ver akemi/tts/kokoro_engine.py
     kokoro_model_path: Path = Path("data/voices/kokoro/kokoro-v1.0.int8.onnx")
     kokoro_voices_path: Path = Path("data/voices/kokoro/voices-v1.0.bin")

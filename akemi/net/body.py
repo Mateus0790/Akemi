@@ -1,6 +1,6 @@
 """Corpo da Akemi: roda no PC do dono e conecta ao núcleo (servidor).
 
-O corpo não pensa. Ele ouve (microfone, áudio do PC), vê (tela) e fala (Fish Audio, Kokoro ou Piper):
+O corpo não pensa. Ele ouve (microfone, áudio do PC), vê (tela) e fala (Fish Audio, ElevenLabs, Kokoro ou Piper):
 
     akemi-corpo --servidor ws://192.168.0.10:8765 --voz --mic --tela
 
@@ -416,7 +416,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Corpo da Akemi (conecta ao núcleo)")
     parser.add_argument("--servidor", help="endereço do núcleo, ex. ws://192.168.0.10:8765")
-    parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão Fish Audio com FISH_API_KEY, senão Piper)")
+    parser.add_argument("--voz", action="store_true", help="fala em voz alta (voz do TTS_ENGINE; padrão: Fish Audio ou ElevenLabs, o que tiver chave; senão Piper)")
     parser.add_argument("--mic", action="store_true", help="ouve você pelo microfone")
     parser.add_argument("--tela", action="store_true", help="olha a tela (OCR)")
     parser.add_argument("--audio-pc", action="store_true", help="ouve o áudio do PC")
