@@ -149,7 +149,7 @@ class Memory:
     def facts(self, limit: int = 30) -> list[str]:
         with self._lock:
             rows = self._db.execute(
-                "SELECT text FROM facts ORDER BY ts DESC LIMIT ?", (limit,)
+                "SELECT text FROM facts ORDER BY ts DESC, id DESC LIMIT ?", (limit,)
             ).fetchall()
         return [r[0] for r in rows]
 
@@ -342,7 +342,7 @@ class Memory:
             sql += " AND kind = ?"
             args.append(kind)
         with self._lock:
-            rows = self._db.execute(sql + " ORDER BY ts DESC LIMIT ?", (*args, limit)).fetchall()
+            rows = self._db.execute(sql + " ORDER BY ts DESC, id DESC LIMIT ?", (*args, limit)).fetchall()
         return [Recall(*r) for r in reversed(rows)]
 
     # ------------------------------------------------------- consolidação

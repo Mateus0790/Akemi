@@ -111,6 +111,18 @@ def test_facts_for_without_subject_is_the_newest():
     assert m.facts_for("", 3) == m.facts(3)
 
 
+def test_newest_does_not_depend_on_the_clock(monkeypatch):
+    # No Windows o relógio é grosso: vários fatos saem com o mesmo ts.
+    monkeypatch.setattr(time, "time", lambda: 1000.0)
+    m = Memory()
+    for i in range(5):
+        m.add_fact(f"fato {i}")
+        m.add_episode("conversa", f"ep {i}")
+    assert m.facts(3) == ["fato 4", "fato 3", "fato 2"]
+    assert m.facts_for("", 3) == m.facts(3)
+    assert [r.text for r in m.recent(2)] == ["ep 3", "ep 4"]
+
+
 def test_old_database_gets_facts_searchable(tmp_path):
     path = tmp_path / "memory.sqlite3"
     db = sqlite3.connect(path)  # banco no formato antigo, sem facts_fts
