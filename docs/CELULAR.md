@@ -1,5 +1,8 @@
 # Akemi no celular
 
+> Tem também o [app em Rust](CELULAR_RUST.md) (`rust-core/akemi-celular`), com o
+> mesmo protocolo. Esta página é sobre o app em Flutter (`app/`); o lado do PC é igual nos dois.
+
 O chip continua no PC (ou no servidor). O app do celular é mais um corpo: tem
 tela, microfone e alto-falante, e conecta **ao lado** do PC, sem derrubar
 ele. A memória, o humor e o jeito dela são os mesmos nos dois.

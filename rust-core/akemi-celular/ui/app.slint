@@ -1,0 +1,514 @@
+// Tela do app da Akemi (Rust + Slint). A lógica está em src/; aqui só o desenho.
+
+import { LineEdit, Button, ListView, ScrollView, ComboBox, Palette } from "std-widgets.slint";
+
+export struct ChatRow {
+    mine: bool,
+    text: string,
+    elsewhere: bool,
+}
+
+// Cores da Akemi (assets/akemi/README.md).
+global Cores {
+    out property <color> rosa: #FC3B7F;
+    out property <color> roxo: #5420A8;
+    out property <color> ciano: #42D9E8;
+    out property <color> lilas: #E9D5FF;
+    out property <bool> escuro: Palette.color-scheme == ColorScheme.dark;
+    out property <color> fundo: escuro ? #17121F : #FBF7FF;
+    out property <color> barra: escuro ? #231A30 : #FFFFFF;
+    out property <color> balao-dela: escuro ? #2E2340 : #EFE4FF;
+    out property <color> texto: escuro ? #F3ECFF : #23173A;
+    out property <color> apagado: escuro ? #A99BC2 : #6E6385;
+}
+
+// Ícones do Material Design (desenhados, sem depender de fonte de emoji).
+global Icones {
+    out property <string> enviar: "M2.01 21L23 12 2.01 3 2 10l15 2-15 2z";
+    out property <string> engrenagem: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
+    out property <string> som: "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z";
+    out property <string> mudo: "M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z";
+    out property <string> pausa: "M6 19h4V5H6v14zm8-14v14h4V5h-4z";
+    out property <string> play: "M8 5v14l11-7z";
+    out property <string> voltar: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z";
+}
+
+component IconButton inherits Rectangle {
+    in property <string> icon;
+    in property <bool> enabled: true;
+    in property <color> tint: Cores.texto;
+    in property <color> fill: transparent;
+    in property <string> label;
+    callback clicked;
+
+    width: 44px;
+    height: 44px;
+    border-radius: self.width / 2;
+    background: touch.pressed && enabled ? Cores.lilas.with-alpha(0.5) : fill;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { clicked(); }
+
+    Path {
+        width: 24px;
+        height: 24px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: icon;
+        fill: enabled ? tint : tint.with-alpha(0.35);
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Bubble inherits Rectangle {
+    in property <ChatRow> item;
+    in property <length> bubble-max;
+
+    height: col.preferred-height;
+    col := VerticalLayout {
+        alignment: start;
+        padding-top: 3px;
+        padding-bottom: 3px;
+        HorizontalLayout {
+            alignment: item.mine ? end : start;
+            Rectangle {
+                background: item.mine ? Cores.rosa : Cores.balao-dela;
+                border-radius: 18px;
+                width: min(root.bubble-max, inner.preferred-width);
+                inner := VerticalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    padding-top: 9px;
+                    padding-bottom: 9px;
+                    spacing: 3px;
+                    Text {
+                        text: item.text;
+                        wrap: word-wrap;
+                        font-size: 16px;
+                        color: item.mine ? #FFFFFF : Cores.texto;
+                    }
+                    if item.elsewhere: Text {
+                        text: "falou no PC";
+                        font-size: 11px;
+                        color: Cores.apagado;
+                    }
+                }
+            }
+        }
+    }
+}
+
+component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> placeholder;
+    in property <InputType> input-type: InputType.text;
+    in-out property <string> text <=> edit.text;
+    spacing: 4px;
+    Text {
+        text: label;
+        font-size: 13px;
+        color: Cores.apagado;
+    }
+    edit := LineEdit {
+        placeholder-text: placeholder;
+        input-type: root.input-type;
+        input-method-hints: { capitalization: CapitalizationMode.none, auto-correct: false, auto-complete: false };
+    }
+}
+
+// O que a tela de configuração devolve (ver settings::Form).
+export struct SettingsForm {
+    // 0 = PC/servidor, 1 = sozinha no celular
+    mode: int,
+    url: string,
+    token: string,
+    name: string,
+    // 0 NVIDIA, 1 OpenAI, 2 Anthropic, 3 outro
+    provider: int,
+    api-key: string,
+    model: string,
+    brain-url: string,
+    owner: string,
+}
+
+component ModeTab inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked;
+    height: 40px;
+    border-radius: 20px;
+    background: selected ? Cores.rosa : transparent;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-action-default => { clicked(); }
+    Text {
+        text: root.text;
+        color: selected ? #FFFFFF : Cores.texto;
+        font-weight: selected ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+component Hint inherits Text {
+    wrap: word-wrap;
+    font-size: 13px;
+    color: Cores.apagado;
+}
+
+component SettingsPage inherits Rectangle {
+    in-out property <SettingsForm> form;
+    in property <string> error;
+    in property <bool> can-go-back;
+    callback save(SettingsForm);
+    callback back;
+
+    in-out property <int> mode: form.mode;
+    in-out property <string> url: form.url;
+    in-out property <string> token: form.token;
+    in-out property <string> device-name: form.name;
+    in-out property <int> provider: form.provider;
+    in-out property <string> api-key: form.api-key;
+    in-out property <string> model: form.model;
+    in-out property <string> brain-url: form.brain-url;
+    in-out property <string> owner: form.owner;
+
+    background: Cores.fundo;
+    VerticalLayout {
+        Rectangle {
+            background: Cores.barra;
+            height: 56px;
+            HorizontalLayout {
+                padding-left: can-go-back ? 6px : 18px;
+                padding-right: 12px;
+                spacing: 6px;
+                if can-go-back: IconButton {
+                    icon: Icones.voltar;
+                    label: "Voltar";
+                    clicked => { root.back(); }
+                }
+                Text {
+                    text: "Onde a Akemi pensa";
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: Cores.texto;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        ScrollView {
+            VerticalLayout {
+                padding: 18px;
+                spacing: 14px;
+                alignment: start;
+                Rectangle {
+                    border-radius: 22px;
+                    background: Cores.balao-dela;
+                    HorizontalLayout {
+                        padding: 2px;
+                        ModeTab {
+                            text: "PC ou servidor";
+                            selected: mode == 0;
+                            clicked => { mode = 0; }
+                        }
+                        ModeTab {
+                            text: "Sozinha no celular";
+                            selected: mode == 1;
+                            clicked => { mode = 1; }
+                        }
+                    }
+                }
+
+                if mode == 0: VerticalLayout {
+                    spacing: 14px;
+                    Hint {
+                        text: "A Akemi completa: memória, ações no PC, secretária e iniciativas. O núcleo pode estar no PC (\"akemi --celular\"), num servidor em casa ou na nuvem, ligado o tempo todo. Em casa use o mesmo Wi-Fi; fora, a Tailscale.";
+                    }
+                    Field {
+                        label: "Endereço";
+                        placeholder: "192.168.0.10 ou ws://192.168.0.10:8765";
+                        text <=> root.url;
+                    }
+                    Field {
+                        label: "Token (AKEMI_TOKEN)";
+                        placeholder: "pelo menos 16 caracteres";
+                        input-type: InputType.password;
+                        text <=> root.token;
+                    }
+                    Field {
+                        label: "Nome deste celular";
+                        placeholder: "celular";
+                        text <=> root.device-name;
+                    }
+                }
+
+                if mode == 1: VerticalLayout {
+                    spacing: 14px;
+                    Hint {
+                        text: "Sem PC e sem servidor: o celular fala direto com a IA, com a mesma personalidade. A conversa fica guardada só no celular. Aqui ela não tem a memória do PC, nem ações no computador, secretária ou iniciativas.";
+                    }
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text {
+                            text: "IA";
+                            font-size: 13px;
+                            color: Cores.apagado;
+                        }
+                        ComboBox {
+                            model: ["NVIDIA (build.nvidia.com)", "OpenAI", "Anthropic (Claude)", "Outra (compatível com OpenAI)"];
+                            current-index <=> root.provider;
+                        }
+                    }
+                    if provider == 3: Field {
+                        label: "Endereço da API";
+                        placeholder: "http://192.168.0.10:11434/v1 (Ollama)";
+                        text <=> root.brain-url;
+                    }
+                    Field {
+                        label: provider == 3 ? "Chave da API (se precisar)" : "Chave da API";
+                        placeholder: provider == 0 ? "nvapi-..." : provider == 2 ? "sk-ant-..." : "sk-...";
+                        input-type: InputType.password;
+                        text <=> root.api-key;
+                    }
+                    Field {
+                        label: "Modelo";
+                        placeholder: provider == 0 ? "nvidia/ising-calibration-1.5-31b (padrão)"
+                            : provider == 2 ? "claude-haiku-4-5 (padrão)"
+                            : provider == 3 ? "qwen2.5:7b" : "nome do modelo";
+                        text <=> root.model;
+                    }
+                    Field {
+                        label: "Seu nome (como ela te chama)";
+                        placeholder: "Mateus";
+                        text <=> root.owner;
+                    }
+                }
+
+                if error != "": Text {
+                    text: error;
+                    wrap: word-wrap;
+                    color: #E5484D;
+                }
+                Button {
+                    text: mode == 0 ? "Salvar e conectar" : "Salvar e conversar";
+                    primary: true;
+                    clicked => {
+                        root.save({
+                            mode: mode, url: url, token: token, name: device-name,
+                            provider: provider, api-key: api-key, model: model,
+                            brain-url: brain-url, owner: owner,
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Akemi";
+    preferred-width: 420px;
+    preferred-height: 760px;
+    background: Cores.fundo;
+
+    // ----------------------------------------------------------- estado (Rust → tela)
+    in property <string> akemi-name: "Akemi";
+    in property <string> status-text: "desconectada";
+    // 0 desconectada, 1 conectando, 2 conectada
+    in property <int> status-level: 0;
+    in property <bool> connected;
+    in property <bool> paused;
+    in property <bool> muted;
+    in property <bool> speaking;
+    in property <string> banner;
+    in property <[ChatRow]> rows;
+    in-out property <bool> show-settings;
+    in-out property <string> draft;
+    // Configurações atuais (para preencher o formulário).
+    in property <SettingsForm> cfg;
+    in property <bool> cfg-complete;
+    // Modo sozinha no celular (sem pausa: não tem núcleo para pausar).
+    in property <bool> local;
+    in property <string> settings-error;
+
+    // ---------------------------------------------------------- ações (tela → Rust)
+    callback send(string);
+    callback typing(string);
+    callback toggle-mute;
+    callback toggle-pause;
+    callback save-settings(SettingsForm);
+
+    // Rola até a última mensagem.
+    public function scroll-to-end() {
+        list.content-y = min(0px, list.visible-height - list.content-height);
+    }
+
+    property <length> top-inset: root.safe-area-insets.top;
+    property <length> keyboard: root.virtual-keyboard-size.height > 0
+        ? max(0px, root.height - root.virtual-keyboard-position.y)
+        : 0px;
+    property <length> bottom-inset: max(root.safe-area-insets.bottom, keyboard);
+
+    Rectangle {
+        x: root.safe-area-insets.left;
+        y: top-inset;
+        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
+        height: root.height - top-inset - bottom-inset;
+
+        VerticalLayout {
+            width: 100%;
+            height: 100%;
+            visible: !show-settings;
+            // ------------------------------------------------------- topo
+            Rectangle {
+                background: Cores.barra;
+                height: 64px;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 6px;
+                    spacing: 10px;
+                    Rectangle {
+                        width: 44px;
+                        height: 44px;
+                            border-radius: 22px;
+                        clip: true;
+                        background: Cores.lilas;
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            image-fit: cover;
+                            source: !connected || paused ? @image-url("img/dormindo.png")
+                                : speaking ? @image-url("img/falando.png")
+                                : @image-url("img/parado.png");
+                        }
+                        Rectangle {
+                            x: parent.width - 13px;
+                            y: parent.height - 13px;
+                            width: 12px;
+                            height: 12px;
+                            border-radius: 6px;
+                            border-width: 2px;
+                            border-color: Cores.barra;
+                            background: status-level == 2 ? #30A46C : status-level == 1 ? #F5B100 : #E5484D;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: akemi-name;
+                            font-size: 18px;
+                            font-weight: 600;
+                            color: Cores.texto;
+                        }
+                        Text {
+                            text: status-text;
+                            font-size: 12px;
+                            color: Cores.apagado;
+                        }
+                    }
+                    IconButton {
+                            icon: muted ? Icones.mudo : Icones.som;
+                        label: muted ? "Ligar a voz" : "Só texto";
+                        clicked => { root.toggle-mute(); }
+                    }
+                    if !local: IconButton {
+                            icon: paused ? Icones.play : Icones.pausa;
+                        label: paused ? "Voltar a autonomia" : "Pausar a autonomia";
+                        enabled: connected;
+                        clicked => { root.toggle-pause(); }
+                    }
+                    IconButton {
+                            icon: Icones.engrenagem;
+                        label: "Configurar";
+                        clicked => { root.show-settings = true; }
+                    }
+                }
+            }
+
+            // ------------------------------------------------------ aviso
+            if banner != "": Rectangle {
+                background: Cores.rosa.with-alpha(0.14);
+                HorizontalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+                    Text {
+                        text: banner;
+                        wrap: word-wrap;
+                        color: Cores.texto;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    Button {
+                        text: "Configurar";
+                        clicked => { root.show-settings = true; }
+                    }
+                }
+            }
+
+            // ---------------------------------------------------- conversa
+            Rectangle {
+                vertical-stretch: 1;
+                if rows.length == 0: Text {
+                    text: connected ? "Fala com ela." : "Conectando na Akemi...";
+                    color: Cores.apagado;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                list := ListView {
+                    width: 100%;
+                    height: 100%;
+                    for row in rows: Bubble {
+                        item: row;
+                        x: 12px;
+                        width: list.visible-width - 24px;
+                        bubble-max: (list.visible-width - 24px) * 0.82;
+                    }
+                }
+            }
+
+            // ------------------------------------------------- escrever
+            Rectangle {
+                background: Cores.barra;
+                HorizontalLayout {
+                    padding: 8px;
+                    padding-left: 12px;
+                    spacing: 6px;
+                    input := LineEdit {
+                        horizontal-stretch: 1;
+                        enabled: connected;
+                        placeholder-text: "Mensagem para a Akemi";
+                        text <=> root.draft;
+                        edited(t) => { root.typing(t); }
+                        accepted(t) => { root.send(t); }
+                    }
+                    IconButton {
+                            icon: Icones.enviar;
+                        label: "Enviar";
+                        enabled: connected && root.draft != "";
+                        fill: self.enabled ? Cores.rosa : transparent;
+                        tint: self.enabled ? #FFFFFF : Cores.apagado;
+                        clicked => { root.send(root.draft); }
+                    }
+                }
+            }
+        }
+
+        if show-settings: SettingsPage {
+            width: 100%;
+            height: 100%;
+            form: cfg;
+            error: settings-error;
+            can-go-back: cfg-complete;
+            save(f) => { root.save-settings(f); }
+            back => { root.show-settings = false; }
+        }
+    }
+}
